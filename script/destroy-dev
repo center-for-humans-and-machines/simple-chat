@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#
+# Stop and remove application (local data in database will be lost).
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+docker compose --file compose.yml down --volumes

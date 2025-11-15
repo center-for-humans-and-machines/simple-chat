@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: {{ .Values.app_name }}
+  {{- if .Values.sticky_session }}
+  annotations:
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+  {{- end }}
+
+spec:
+  rules:
+    - host: {{ .Values.main_url | quote }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ .Values.app_name }}
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - {{ .Values.main_url | quote }}

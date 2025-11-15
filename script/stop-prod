@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#
+# Stop application.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+docker compose --file compose.yml --profile prod stop

@@ -1,0 +1,56 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.app_name }}
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ .Values.dockersecret }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app_name }}
+  labels:
+    helm.sh/chart: {{ .Chart.Name }}
+    helm.sh/deploymentname: {{ .Values.app_name }}
+spec:
+  replicas: {{ .Values.replica_count }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app_name }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+      labels:
+        app: {{ .Values.app_name }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: {{ .Values.app_name }}
+          image: {{ .Values.app_image }}
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory | default "16Mi" | quote }}
+              cpu: {{ .Values.resources.requests.cpu | default "1m" | quote }}
+            limits:
+              memory: {{ .Values.resources.limits.memory | default "1Gi" | quote }}
+              cpu: {{ .Values.resources.limits.cpu | default "2" | quote }}
+          ports:
+            - containerPort: {{ .Values.web_port }}
+              protocol: TCP
+          env:
+            {{- range $key, $val := .Values.deployment_vars }}
+            - name: {{ $key | quote }}
+              value: {{ $val | quote }}
+            {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.app_name }}
+---

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#
+# Start application.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+docker compose --file compose.yml --profile prod up --detach --remove-orphans

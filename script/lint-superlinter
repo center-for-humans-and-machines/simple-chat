@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+# Lint code with super-linter.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# shellcheck disable=SC1091
+source utils.sh
+
+check_command docker
+
+fancy_echo "Linting code with super-linter (GitHub Actions)"
+docker compose --file compose.lint.yml run --rm --remove-orphans super-linter

@@ -1,0 +1,141 @@
+services:
+  frontend-dev:
+    profiles:
+      - dev
+    build:
+      context: ./frontend
+      target: development
+    ports:
+      - 1234:1234
+    stdin_open: true
+    depends_on:
+      - db
+      - backend
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+      - NODE_ENV=development
+    networks:
+      - frontend-backend
+    restart: always
+    healthcheck:
+      test: curl --fail http://localhost:1234 || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  frontend-prod:
+    profiles:
+      - prod
+    build:
+      context: ./frontend
+      target: production
+    ports:
+      - 8080:80
+    stdin_open: true
+    depends_on:
+      - db
+      - backend
+    environment:
+      - NODE_ENV=production
+    networks:
+      - frontend-backend
+    restart: always
+    healthcheck:
+      test: curl --fail http://localhost:8080 || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  backend:
+    build: backend
+    ports:
+      - 8000:8000
+    depends_on:
+      - db
+    environment:
+      - DATABASE_NAME=chatbot
+      - MONGO_URL=mongodb://db:27017
+    env_file: backend/.env
+    volumes:
+      - ./backend:/app
+    networks:
+      - frontend-backend
+      - database
+    restart: always
+    command: poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  dashboard-prod:
+    profiles:
+      - prod
+    build:
+      context: ./dashboard
+      target: production
+    ports:
+      - 8080:80
+    networks:
+      - frontend-backend
+    depends_on:
+      - backend
+    volumes:
+      - ./dashboard:/usr/src/app
+      - /usr/src/app/node_modules
+    env_file: .env
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+      - REACT_APP_BACKEND_SOCKET_URL=localhost:8000
+      - NODE_ENV=production
+    restart: always
+    healthcheck:
+      test: curl --fail http://localhost:8080 || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  dashboard-dev:
+    profiles:
+      - dev
+    build:
+      context: ./dashboard
+      target: development
+    ports:
+      - "3001:3001"
+    networks:
+      - frontend-backend
+    depends_on:
+      - backend
+    volumes:
+      - ./dashboard:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+      - NODE_ENV=development
+      - PORT=3001
+
+  db:
+    image: mongo:8.2.1
+    restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - mongodb_data_container:/data/db
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mongodb_data_container:
+
+networks:
+  database:
+  frontend-backend:

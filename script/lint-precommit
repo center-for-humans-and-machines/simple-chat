@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+# Lint code with pre-commit.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# shellcheck disable=SC1091
+source utils.sh
+
+check_command poetry
+
+fancy_echo "Linting code with pre-commit"
+poetry run pre-commit run --all-files

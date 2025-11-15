@@ -1,0 +1,12 @@
+resources:
+  requests: {}
+  limits: {}
+app_name: ""
+main_url: ""
+app_image: ""
+web_port: 5000
+dockersecret: ""
+replica_count: 1
+sticky_session: 1
+sentry_enabled: false
+sentry_dsn: ""

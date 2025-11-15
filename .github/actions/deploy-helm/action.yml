@@ -1,0 +1,107 @@
+name: "Deploy with Helm"
+description: "Deploy application to Kubernetes using Helm charts"
+
+inputs:
+  app-name:
+    description: "Application name"
+    required: true
+  image-name:
+    description: "Docker image name with tag"
+    required: true
+  main-url:
+    description: "Main application URL"
+    required: true
+  web-port:
+    description: "Web service port"
+    required: true
+    default: "80"
+  namespace:
+    description: "Kubernetes namespace"
+    required: true
+    default: "simple-chat"
+  replica-count:
+    description: "Number of replicas"
+    required: false
+    default: "1"
+  deployment-vars:
+    description: "Path to deployment variables YAML file"
+    required: false
+    default: "/tmp/deployment_vars.yml"
+  kubeconfig:
+    description: "Base64 encoded kubeconfig"
+    required: true
+  block-bots:
+    description: "Whether to block bots"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure Kubernetes access
+      shell: bash
+      run: |
+        echo "${{ inputs.kubeconfig }}" | base64 -d > kubeconfig
+        chmod 400 kubeconfig
+
+    - name: Install Helm
+      shell: bash
+      run: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+    - name: Deploy with Helm
+      shell: bash
+      run: |
+        # Verify that required Helm chart files exist
+        if [ ! -f charts/web-service/Chart.yml ]; then
+          echo "Error: charts/web-service/Chart.yml not found"
+          exit 1
+        fi
+
+        if [ ! -f charts/web-service/values.yaml ]; then
+          echo "Error: charts/web-service/values.yaml not found"
+          exit 1
+        fi
+
+        if [ ! -f charts/web-service/templates/deployment.yml ]; then
+          echo "Error: charts/web-service/templates/deployment.yml not found"
+          exit 1
+        fi
+
+        if [ ! -f charts/web-service/templates/service.yml ]; then
+          echo "Error: charts/web-service/templates/service.yml not found"
+          exit 1
+        fi
+
+        if [ ! -f charts/web-service/templates/ingress.yml ]; then
+          echo "Error: charts/web-service/templates/ingress.yml not found"
+          exit 1
+        fi
+
+        # Deploy with Helm
+        HELM_ARGS="--set app_name=${{ inputs.app-name }}"
+        HELM_ARGS="$HELM_ARGS --set app_image=${{ inputs.image-name }}"
+        HELM_ARGS="$HELM_ARGS --set main_url=${{ inputs.main-url }}"
+        HELM_ARGS="$HELM_ARGS --set web_port=${{ inputs.web-port }}"
+        HELM_ARGS="$HELM_ARGS --set replica_count=${{ inputs.replica-count }}"
+        HELM_ARGS="$HELM_ARGS --set resources.requests.memory=1Gi"
+        HELM_ARGS="$HELM_ARGS --set resources.limits.memory=2Gi"
+
+        if [ -f "${{ inputs.deployment-vars }}" ]; then
+          HELM_ARGS="$HELM_ARGS --values ${{ inputs.deployment-vars }}"
+        fi
+
+        helm upgrade \
+          --install \
+          --namespace ${{ inputs.namespace }} \
+          --create-namespace \
+          ${{ inputs.app-name }} \
+          charts/web-service \
+          $HELM_ARGS \
+          --atomic \
+          --kubeconfig kubeconfig
+
+    - name: Output deployment URL
+      shell: bash
+      run: |
+        echo "Application deployed to https://${{ inputs.main-url }}"

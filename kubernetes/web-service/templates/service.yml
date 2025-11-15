@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app_name }}
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: {{ .Values.web_port }}
+  selector:
+    app: {{ .Values.app_name }}
+  type: ClusterIP
+  sessionAffinity: None

@@ -1,0 +1,375 @@
+name: Deployment
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: registry.example.com
+  DOCKER_REGISTRY_PREFIX: mynamespace/base-images
+  CLUSTER_BASE_URL: example.com
+  NAMESPACE: simple-chat
+
+jobs:
+  backend:
+    name: Backend Pipeline
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up environment variables
+        id: env
+        run: |
+          # Build environment variables (from build_env.sh)
+          COMMIT_TIMESTAMP=$(date -d "${{ github.event.head_commit.timestamp }}" +%Y-%m-%d 2>/dev/null || date -d "${{ github.event.head_commit.timestamp }}" +%Y%m%d)
+          APP_NAME="simple-chat-backend"
+          IMAGE_NAME="${APP_NAME}-${{ github.ref_name }}"
+          IMAGE_TAG="${COMMIT_TIMESTAMP}_${{ github.sha }}"
+
+          # URL configuration
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            MAIN_URL="${APP_NAME}.${{ env.CLUSTER_BASE_URL }}"
+          else
+            MAIN_URL="${APP_NAME}-${{ github.ref_name }}.${{ env.CLUSTER_BASE_URL }}"
+          fi
+
+          echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "MAIN_URL=${MAIN_URL}" >> $GITHUB_OUTPUT
+          echo "FULL_IMAGE=${{ env.REGISTRY }}/${{ env.DOCKER_REGISTRY_PREFIX }}/${IMAGE_NAME}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run linters
+        working-directory: ./backend
+        run: |
+          if [ -f .pre-commit-config.yaml ]; then
+            pip install pre-commit
+            pre-commit run --all-files || true
+          fi
+
+      - name: Login to Docker Registry
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        working-directory: ./backend
+        run: |
+          docker build \
+            --cache-from ${{ steps.env.outputs.FULL_IMAGE }} \
+            --tag ${{ steps.env.outputs.FULL_IMAGE }} \
+            .
+          docker push ${{ steps.env.outputs.FULL_IMAGE }}
+
+      - name: Create deployment variables
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          # Define deployment variables to be used in Helm chart
+          cat > /tmp/deployment_vars.yml << EOF
+          deployment_vars:
+            MONGO_URL: "${{ secrets.MONGO_URL }}"
+            MONGO_OPLOG_URL: "${{ secrets.MONGO_OPLOG_URL }}"
+            DATABASE_NAME: "simple-chat-backend"
+            OPENAI_BASE_URL: "${{ secrets.OPENAI_BASE_URL }}"
+            OPENAI_API_KEY: "${{ secrets.OPENAI_API_KEY }}"
+            OPENAI_DEFAULT_MODEL: "${{ secrets.OPENAI_DEFAULT_MODEL }}"
+            S3_ENDPOINT: "${{ secrets.S3_ENDPOINT }}"
+            S3_ACCESS_KEY: "${{ secrets.S3_ACCESS_KEY }}"
+            S3_SECRET_KEY: "${{ secrets.S3_SECRET_KEY }}"
+            S3_BUCKET_NAME: "${{ secrets.S3_BUCKET_NAME }}"
+            OPENAI_BACKEND: "${{ secrets.OPENAI_BACKEND }}"
+            TOGETHER_AI_URL: "${{ secrets.TOGETHER_AI_URL }}"
+            TOGETHER_AI_KEY: "${{ secrets.TOGETHER_AI_KEY }}"
+            AZURE_OPENAI_API_KEY: "${{ secrets.AZURE_OPENAI_API_KEY }}"
+            AZURE_OPENAI_BASE_URL: "${{ secrets.AZURE_OPENAI_BASE_URL }}"
+          EOF
+
+      - name: Configure Kubernetes access
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+          chmod 400 kubeconfig
+
+      - name: Deploy with Helm
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # Deploy application
+          helm upgrade \
+            --install \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            "${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            ./charts/web-service \
+            --set app_name="${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            --set app_image="${{ steps.env.outputs.FULL_IMAGE }}" \
+            --set main_url="${{ steps.env.outputs.MAIN_URL }}" \
+            --set web_port="8000" \
+            --set replica_count="1" \
+            --set resources.requests.memory=1Gi \
+            --set resources.limits.memory=2Gi \
+            --values /tmp/deployment_vars.yml \
+            --atomic \
+            --kubeconfig kubeconfig
+
+      - name: Set deployment URL
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          echo "Backend deployed to https://${{ steps.env.outputs.MAIN_URL }}"
+
+  frontend:
+    name: Frontend Pipeline
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up environment variables
+        id: env
+        run: |
+          COMMIT_TIMESTAMP=$(date -d "${{ github.event.head_commit.timestamp }}" +%Y-%m-%d 2>/dev/null || date -d "${{ github.event.head_commit.timestamp }}" +%Y%m%d)
+          APP_NAME="simple-chat-frontend"
+          IMAGE_NAME="${APP_NAME}-${{ github.ref_name }}"
+          IMAGE_TAG="${COMMIT_TIMESTAMP}_${{ github.sha }}"
+
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            MAIN_URL="${APP_NAME}.${{ env.CLUSTER_BASE_URL }}"
+            BACKEND_URL="simple-chat-backend.${{ env.CLUSTER_BASE_URL }}"
+          else
+            MAIN_URL="${APP_NAME}-${{ github.ref_name }}.${{ env.CLUSTER_BASE_URL }}"
+            BACKEND_URL="simple-chat-backend-${{ github.ref_name }}.${{ env.CLUSTER_BASE_URL }}"
+          fi
+
+          echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "MAIN_URL=${MAIN_URL}" >> $GITHUB_OUTPUT
+          echo "BACKEND_URL=${BACKEND_URL}" >> $GITHUB_OUTPUT
+          echo "FULL_IMAGE=${{ env.REGISTRY }}/${{ env.DOCKER_REGISTRY_PREFIX }}/${IMAGE_NAME}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          NODE_ENV: production
+          REACT_APP_BACKEND_URL: ${{ steps.env.outputs.BACKEND_URL }}
+        run: |
+          echo "REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL" > .env
+          npm clean-install
+          npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-dist
+          path: |
+            frontend/.env
+            frontend/dist/
+          retention-days: 7
+
+      - name: Login to Docker Registry
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        working-directory: ./frontend
+        run: |
+          docker build \
+            --cache-from ${{ steps.env.outputs.FULL_IMAGE }} \
+            --tag ${{ steps.env.outputs.FULL_IMAGE }} \
+            .
+          docker push ${{ steps.env.outputs.FULL_IMAGE }}
+
+      - name: Deploy with Helm
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          # Configure Kubernetes access
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+          chmod 400 kubeconfig
+
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # Deploy application
+          helm upgrade \
+            --install \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            "${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            ./charts/web-service \
+            --set app_name="${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            --set app_image="${{ steps.env.outputs.FULL_IMAGE }}" \
+            --set main_url="${{ steps.env.outputs.MAIN_URL }}" \
+            --set web_port="80" \
+            --set replica_count="1" \
+            --set resources.requests.memory=1Gi \
+            --set resources.limits.memory=2Gi \
+            --atomic \
+            --kubeconfig kubeconfig
+
+      - name: Set deployment URL
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          echo "Frontend deployed to https://${{ steps.env.outputs.MAIN_URL }}"
+
+  dashboard:
+    name: Dashboard Pipeline
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up environment variables
+        id: env
+        run: |
+          COMMIT_TIMESTAMP=$(date -d "${{ github.event.head_commit.timestamp }}" +%Y-%m-%d 2>/dev/null || date -d "${{ github.event.head_commit.timestamp }}" +%Y%m%d)
+          APP_NAME="simple-chat-dashboard"
+          IMAGE_NAME="${APP_NAME}-${{ github.ref_name }}"
+          IMAGE_TAG="${COMMIT_TIMESTAMP}_${{ github.sha }}"
+
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            MAIN_URL="${APP_NAME}.${{ env.CLUSTER_BASE_URL }}"
+            BACKEND_URL="https://simple-chat-backend.${{ env.CLUSTER_BASE_URL }}"
+          else
+            MAIN_URL="${APP_NAME}-${{ github.ref_name }}.${{ env.CLUSTER_BASE_URL }}"
+            BACKEND_URL="https://simple-chat-backend-${{ github.ref_name }}.${{ env.CLUSTER_BASE_URL }}"
+          fi
+
+          echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "MAIN_URL=${MAIN_URL}" >> $GITHUB_OUTPUT
+          echo "BACKEND_URL=${BACKEND_URL}" >> $GITHUB_OUTPUT
+          echo "FULL_IMAGE=${{ env.REGISTRY }}/${{ env.DOCKER_REGISTRY_PREFIX }}/${IMAGE_NAME}:${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Build dashboard
+        working-directory: ./dashboard
+        env:
+          NODE_ENV: production
+          REACT_APP_BACKEND_URL: ${{ steps.env.outputs.BACKEND_URL }}
+        run: |
+          echo "REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL" > .env
+          npm clean-install
+          npm run build-prod
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dashboard-dist
+          path: |
+            dashboard/.env
+            dashboard/dist/
+          retention-days: 7
+
+      - name: Login to Docker Registry
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        working-directory: ./dashboard
+        run: |
+          docker build \
+            --cache-from ${{ steps.env.outputs.FULL_IMAGE }} \
+            --tag ${{ steps.env.outputs.FULL_IMAGE }} \
+            .
+          docker push ${{ steps.env.outputs.FULL_IMAGE }}
+
+      - name: Deploy with Helm
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          # Configure Kubernetes access
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+          chmod 400 kubeconfig
+
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # Deploy application
+          helm upgrade \
+            --install \
+            --namespace ${{ env.NAMESPACE }} \
+            --create-namespace \
+            "${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            ./charts/web-service \
+            --set app_name="${{ steps.env.outputs.APP_NAME }}-${{ github.ref_name }}" \
+            --set app_image="${{ steps.env.outputs.FULL_IMAGE }}" \
+            --set main_url="${{ steps.env.outputs.MAIN_URL }}" \
+            --set web_port="80" \
+            --set replica_count="1" \
+            --set resources.requests.memory=1Gi \
+            --set resources.limits.memory=2Gi \
+            --atomic \
+            --kubeconfig kubeconfig
+
+      - name: Set deployment URL
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+        run: |
+          echo "Dashboard deployed to https://${{ steps.env.outputs.MAIN_URL }}"
+
+  deployment-summary:
+    name: Deployment Summary
+    needs: [backend, frontend, dashboard]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+
+    steps:
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Simple Chat Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status | Branch |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ✅ Deployed | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ✅ Deployed | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dashboard | ✅ Deployed | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ env.CLUSTER_BASE_URL }}" >> $GITHUB_STEP_SUMMARY

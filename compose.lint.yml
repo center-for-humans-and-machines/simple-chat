@@ -1,0 +1,30 @@
+services:
+  super-linter:
+    image: ghcr.io/super-linter/super-linter:v8
+    # Remember to update the variables from the original workflow in
+    # .github/workflows/super-linter.yml
+    environment:
+      - RUN_LOCAL=true
+      - VALIDATE_ALL_CODEBASE=true
+      - DEFAULT_BRANCH=main
+      - VALIDATE_CHECKOV=false
+      - VALIDATE_BASH_EXEC=false
+      # https://github.com/super-linter/super-linter/issues/6437
+      - PYTHON_PYLINT_CONFIG_FILE=.pylintrc
+      - PYTHON_ISORT_CONFIG_FILE=backend/pyproject.toml
+      - LINTER_RULES_PATH=.
+      - FIX_ENV=true
+      - FIX_YAML_PRETTIER=true
+      - FIX_PYTHON_ISORT=true
+      - FIX_PYTHON_RUFF=true
+      - FIX_JUPYTER_NBQA_ISORT=true
+      - FIX_JSON_PRETTIER=true
+      - VALIDATE_GIT_COMMITLINT=false
+      - VALIDATE_PYTHON_PYINK=false
+      # https://github.com/super-linter/super-linter/issues/6447
+      - FIX_SHELL_SHFMT=true
+      # https://github.com/super-linter/super-linter/issues/5070#issuecomment-2058901647
+      - SHELL=/bin/bash
+    volumes:
+      - .:/tmp/lint
+    platform: linux/amd64

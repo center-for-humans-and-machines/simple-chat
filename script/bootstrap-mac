@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# Install dev dependencies for macOS.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+fancy_echo "Install pre-commit"
+brew install pre-commit
+
+fancy_echo "Install pre-commit hooks"
+pre-commit install --overwrite

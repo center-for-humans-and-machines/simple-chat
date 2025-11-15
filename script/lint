@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#
+# Lint code.
+
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# shellcheck disable=SC1091
+source utils.sh
+
+./script/lint-superlinter
+./script/lint-precommit

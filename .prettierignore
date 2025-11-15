@@ -1,0 +1,4 @@
+# Based on .gitignore
+
+# npm
+**/node_modules
