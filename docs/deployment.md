@@ -2,6 +2,10 @@
 
 This step assumes that the frontend and backend `.env` files have already been created as described in the [readme](../readme.md#requirements). The backend `.env` file requires access to object storage for image uploads. Options for object storage include Amazon S3 and MinIO. The following guide uses terminology of [software engineering environments](https://dev.to/flippedcoding/difference-between-development-stage-and-production-d0p)—the different stages where code is built, tested, and deployed, such as development and production.
 
+**First-time local installation tutorial:**
+
+[![Watch the video](https://img.youtube.com/vi/M8G7-EQHCxc/hqdefault.jpg)](https://youtu.be/M8G7-EQHCxc)
+
 ## Docker Compose
 
 Simple Chat includes a Docker Compose file for local development. The application can be started using the shell script with the same name and offers two profiles: development and production. The development profile supports hot reloading for the frontend and volume mounting, which are disabled in the production profile. Health checks on the modular components ensure transparent error logging.
