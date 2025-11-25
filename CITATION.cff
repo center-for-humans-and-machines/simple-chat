@@ -1,0 +1,81 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Facilitating the Integration of LLMs Into Online
+  Experiments With Simple Chat
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: article
+authors:
+  - given-names: Rodrigo
+    family-names: Bermudez Schettino
+    email: schettino@mpib-berlin.mpg.de
+    affiliation: Max Planck Institute for Human Development
+    orcid: "https://orcid.org/0000-0003-1610-6195"
+  - given-names: Ali
+    family-names: Dasmeh
+    email: dasmeh@mpib-berlin.mpg.de
+    affiliation: Max Planck Institute for Human Development
+    orcid: "https://orcid.org/0009-0005-8236-1356"
+  - given-names: Levin
+    family-names: Brinkmann
+    email: brinkmann@mpib-berlin.mpg.de
+    affiliation: Max Planck Institute for Human Development
+    orcid: "https://orcid.org/0000-0002-1642-8744"
+identifiers:
+  - type: doi
+    value: 10.48550/arXiv.2511.19123
+    description: arXiv preprint
+repository-code: >-
+  https://github.com/center-for-humans-and-machines/simple-chat
+abstract: >-
+  As large language models (LLMs) become increasingly
+  prevalent, understanding human-LLM interactions is
+  emerging as a central priority in psychological research.
+  Online experiments offer an efficient means to study
+  human-LLM interactions, yet integrating LLMs into
+  established survey platforms remains technically
+  demanding, particularly when aiming for ecologically
+  valid, real-time conversational experiences with strong
+  experimental control. We introduce Simple Chat, an
+  open-source, research-focused chat interface that
+  streamlines LLM integration for platforms such as
+  Qualtrics, oTree, and LimeSurvey, while presenting a
+  unified participant experience across conditions. Simple
+  Chat connects to both commercial providers and
+  open-weights models, supports streaming responses to
+  preserve conversational flow, and offers an administrative
+  interface for fine-grained control of prompts and
+  interface features. By reducing technical barriers,
+  standardizing interfaces, and improving participant
+  experience, Simple Chat helps advance the study of
+  human-LLM interaction. In this article, we outline Simple
+  Chat's key features, provide a step-by-step tutorial, and
+  demonstrate its utility through two illustrative case
+  studies.
+keywords:
+  - online experiments
+  - human-machine interaction
+  - large language models
+  - chatbots
+license: CC-BY-4.0
+date-released: "2025-11-24"
+preferred-citation:
+  type: article
+  authors:
+    - given-names: Rodrigo
+      family-names: Bermudez Schettino
+      affiliation: Max Planck Institute for Human Development
+    - given-names: Ali
+      family-names: Dasmeh
+      affiliation: Max Planck Institute for Human Development
+    - given-names: Levin
+      family-names: Brinkmann
+      affiliation: Max Planck Institute for Human Development
+  title: "Facilitating the Integration of LLMs Into Online Experiments With Simple Chat"
+  journal: "arXiv preprint arXiv:2511.19123"
+  url: https://doi.org/10.48550/arXiv.2511.19123
+  year: 2025
