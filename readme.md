@@ -64,6 +64,28 @@ Below are diagrams illustrating the architecture and chat interface:
 
 Refer to the [documentation](./docs/readme.md) folder for usage instructions.
 
+## Citation
+
+If you use Simple Chat in your research, please cite as follows:
+
+- BibTeX:
+
+  ```
+  @misc{schettino2025facilitatingintegrationllmsonline,
+        title={Facilitating the Integration of LLMs Into Online Experiments With Simple Chat},
+        author={R. Bermudez Schettino and A. Dasmeh and L. Brinkmann},
+        year={2025},
+        eprint={2511.19123},
+        archivePrefix={arXiv},
+        primaryClass={cs.HC},
+        url={https://arxiv.org/abs/2511.19123},
+  }
+  ```
+
+- APA:
+
+  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_+. arXiv preprint arXiv:2511.19123. https://doi.org/10.48550/arXiv.2511.19123
+
 ## Related
 
 - Qualtrics example - [Download](https://drive.google.com/file/d/1cPyH_bUEBzdn5NsDzJvVUe9QytTyvbj3/view?usp=sharing).
