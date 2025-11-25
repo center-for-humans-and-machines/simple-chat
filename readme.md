@@ -84,7 +84,7 @@ If you use Simple Chat in your research, please cite as follows:
 
 - APA:
 
-  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_+. arXiv preprint arXiv:2511.19123. https://doi.org/10.48550/arXiv.2511.19123
+  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_. arXiv. https://doi.org/10.48550/arXiv.2511.19123
 
 ## Related
 
