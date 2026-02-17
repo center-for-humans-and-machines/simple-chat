@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState, useRef } from "react";
+import React, { FC, useEffect, useState, useRef, useMemo } from "react";
 import { Box } from "@mui/material";
 import Prism from "react-syntax-highlighter/dist/cjs/prism";
 import { dark } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -6,6 +6,7 @@ import { dark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 interface ChatMessageProps {
   content: string;
   role: "assistant" | "user";
+  type?: "text" | "image";
   setIsTypingFalse: any;
 }
 
@@ -208,13 +209,16 @@ const ChatMessage: FC<ChatMessageProps> = ({
   // Only apply the formatting pipeline if the role is "assistant"
   const pipelineSteps = ["hr", "bold", "italic", "headings", "trim"];
 
-  if (role === "assistant") {
+  const processedParts = useMemo(() => {
+    if (role !== "assistant") {
+      return [];
+    }
     let tempDisplayedText = displayedText
       .replace("<think>\n\n</think>", "")
       .replace(/^\n\n/, "");
 
-    const processedParts = processText(tempDisplayedText, pipelineSteps);
-  }
+    return processText(tempDisplayedText, pipelineSteps);
+  }, [displayedText, role, pipelineSteps]);
   return (
     <Box
       sx={{
