@@ -6,4 +6,4 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-docker compose --file compose.yml down --volumes
+docker compose --file compose.yml --profile dev down --volumes
