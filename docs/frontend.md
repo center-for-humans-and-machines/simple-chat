@@ -16,7 +16,7 @@ The GPT-4o and similar models support uploading images. To disable this feature,
 
 To disable the entire chat input form, add `&chat_input=false` at the end of the URL when integrating it as an iframe.
 
-`https://YOUR_SIMPLE_CHAT_FRONTEND_URL/?pid=[project_id]&participant_id=[participant_id]&experiment_id=[experiment_id]&model=gpt-4o&chat_input=false&custom_system_message_id=[custom_system_message_id]`
+`https://YOUR_SIMPLE_CHAT_FRONTEND_URL/?pid=[project_id]&participant_id=[participant_id]&experiment_id=[experiment_id]&model=gpt-4o&chat_input=false&system_message_id=[custom_system_message_id]`
 
 This could be useful in combination with a custom system message that sets `assistant_first` to `true`, which makes the assistant start the conversation without waiting for user input. In this case, the participant will only see the assistant's message when loading the chat interface, and there will be no input box for the participant to type in. This setup is ideal for scenarios where the researcher wants to observe how participants react to the assistant's initial message without any influence from their own input.
 
@@ -35,7 +35,7 @@ curl --request POST \
 }'
 ```
 
-The previous example uses `YOUR_PROJECT_ID` as a placeholder for the actual project ID, and `YOUR_SIMPLE_CHAT_BACKEND_URL` as a placeholder for the actual backend URL. The `custom_system_message_id` in the frontend URL should be replaced with the ID returned from this API call.
+The previous example uses `YOUR_PROJECT_ID` as a placeholder for the actual project ID, and `YOUR_SIMPLE_CHAT_BACKEND_URL` as a placeholder for the actual backend URL. The `system_message_id` in the frontend URL should be replaced with the ID returned from this API call.
 
 ## Initiate a conversation
 
