@@ -10,6 +10,7 @@ const ChatPage: React.FC = () => {
   const [sessionId, setSessionId] = useState("");
   const [participantId, setParticipantId] = useState("");
   const [messages, setMessages] = useState([]);
+  const [showChatInput, setShowChatInput] = useState(true);
 
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(true);
@@ -23,6 +24,9 @@ const ChatPage: React.FC = () => {
     let params: { [key: string]: any } = {};
     for (let [key, value] of searchParams) {
       params[key] = value;
+    }
+    if (searchParams.get("chat_input") === "false") {
+      setShowChatInput(false);
     }
     console.log("url param info: ", params);
     setUrlParams(params);
@@ -240,14 +244,16 @@ const ChatPage: React.FC = () => {
             </>
           )}
         </div>
-        <ChatInputForm
-          newMessage={newMessage}
-          handleInputChange={handleInputChange}
-          handleSubmit={handleSubmit}
-          isTyping={isTyping}
-          setImageFile={setImageFile}
-          imageFile={imageFile}
-        />
+        {showChatInput && (
+          <ChatInputForm
+            newMessage={newMessage}
+            handleInputChange={handleInputChange}
+            handleSubmit={handleSubmit}
+            isTyping={isTyping}
+            setImageFile={setImageFile}
+            imageFile={imageFile}
+          />
+        )}
       </Box>
     </>
   );
