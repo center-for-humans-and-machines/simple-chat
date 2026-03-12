@@ -6,11 +6,16 @@ import { Message } from "../types";
 import BlinkingDots from "./BlinkingDots";
 import { socket } from "../socket";
 
+const shouldShowChatInput = (): boolean => {
+  const searchParams = new URLSearchParams(window.location.search);
+  return searchParams.get("chat_input") !== "false";
+};
+
 const ChatPage: React.FC = () => {
   const [sessionId, setSessionId] = useState("");
   const [participantId, setParticipantId] = useState("");
   const [messages, setMessages] = useState([]);
-  const [showChatInput, setShowChatInput] = useState(true);
+  const [showChatInput] = useState(() => shouldShowChatInput());
 
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(true);
@@ -24,9 +29,6 @@ const ChatPage: React.FC = () => {
     let params: { [key: string]: any } = {};
     for (let [key, value] of searchParams) {
       params[key] = value;
-    }
-    if (searchParams.get("chat_input") === "false") {
-      setShowChatInput(false);
     }
     console.log("url param info: ", params);
     setUrlParams(params);
