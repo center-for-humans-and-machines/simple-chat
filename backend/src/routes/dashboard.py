@@ -3,8 +3,10 @@ import os
 
 from fastapi import APIRouter, Body, HTTPException
 from src.models.message import Conversations
-from src.models.models import Project
+from src.models.models import Project, ProjectLimits, TokenUsage
+from src.utils.configs import model_prices
 from src.utils.logging import setup_logger
+from src.utils.usage import summarize_usage
 
 logger = setup_logger(__name__)
 
@@ -116,3 +118,48 @@ async def update_loading_message(
     await project.save()
 
     return {"status": True, "updated_loading_message": project.loading_message}
+
+
+@dashboard_router.get("/usage/{project_id}")
+async def project_usage(project_id: str):
+    records = await TokenUsage.find_many({"project_id": project_id}).to_list()
+    return {"project_id": project_id, "prices": model_prices, **summarize_usage(records)}
+
+
+@dashboard_router.get("/usage/{project_id}/conversation/{conversation_id}")
+async def conversation_usage(project_id: str, conversation_id: str):
+    records = await TokenUsage.find_many(
+        {"project_id": project_id, "conversation_id": conversation_id}
+    ).to_list()
+    summary = summarize_usage(records)
+    return {
+        "conversation_id": conversation_id,
+        "total": summary["total"],
+        "by_model": summary["by_model"],
+    }
+
+
+@dashboard_router.get("/limits/{project_id}")
+async def get_limits(project_id: str):
+    project = await Project.find_one({"project_id": project_id})
+
+    if not project:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    return project.limits
+
+
+@dashboard_router.put("/limits/{project_id}")
+async def update_limits(project_id: str, limits: ProjectLimits):
+    project = await Project.find_one({"project_id": project_id})
+
+    if not project:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    limits.participant_allowlist = sorted(
+        {pid.strip() for pid in limits.participant_allowlist if pid.strip()}
+    )
+    project.limits = limits
+    await project.save()
+
+    return project.limits
