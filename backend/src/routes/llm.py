@@ -8,6 +8,7 @@ from src.models.models import LlmCall, Project
 from src.utils.helpers import get_openai_backend
 from src.utils.llm_model import completion_with_backoff, init_model_endpoint
 from src.utils.logging import setup_logger
+from src.utils.usage import record_response_usage
 
 logger = setup_logger(__name__)
 
@@ -64,6 +65,7 @@ async def send_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -99,6 +101,7 @@ async def send_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -155,5 +158,6 @@ async def function_call(data: LlmFunctionCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, "gpt-4o-mini", response, source="llm_api")
 
     return response.choices

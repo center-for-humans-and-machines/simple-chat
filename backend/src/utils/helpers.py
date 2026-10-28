@@ -63,6 +63,7 @@ async def get_response(
     client: AsyncOpenAI | AsyncAzureOpenAI,
     model: str,
     participant_id: str = None,
+    project_id: str = None,
 ) -> MessageDocument:
     omessages = [parse_to_openai(message) for message in messages]
     full_response = await call_model(
@@ -72,6 +73,7 @@ async def get_response(
         session_id=session_id,
         experiment_id=experiment_id,
         participant_id=participant_id,
+        project_id=project_id,
         sio_server=sio_server,
         sid=sid,
     )

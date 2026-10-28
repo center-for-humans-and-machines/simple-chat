@@ -9,6 +9,7 @@ from src.models.settings import get_settings
 from src.utils.configs import models
 from src.utils.db import create_message
 from src.utils.logging import setup_logger
+from src.utils.usage import record_usage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 logger = setup_logger(__name__)
@@ -118,6 +119,7 @@ async def call_model(
     session_id: str,
     experiment_id: str,
     participant_id: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> OpenAIMessage:
     model = model.replace("together_ai-", "")  # for together call
 
@@ -211,6 +213,19 @@ async def call_model(
 
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
+
+        if project_id is not None:
+            # streamed responses carry no `usage` with the pinned openai client,
+            # so these counts are tiktoken estimates
+            await record_usage(
+                project_id=project_id,
+                model=model,
+                prompt_tokens=request_token_count,
+                completion_tokens=response_token_count,
+                estimated=True,
+                conversation_id=session_id,
+                participant_id=participant_id,
+            )
 
         if total_token_count > token_count_limit:
             raise TokenError(

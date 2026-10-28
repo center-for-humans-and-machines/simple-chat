@@ -11,6 +11,8 @@ from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
                                store_search_parameters, upload)
+from src.utils.limits import (check_conversation_limits, check_start_limits,
+                              limit_message)
 from src.utils.llm_model import init_model_endpoint
 from src.utils.logging import setup_logger
 
@@ -20,6 +22,21 @@ logger = setup_logger(__name__)
 sio_server = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
 sio_app = socketio.ASGIApp(socketio_server=sio_server, socketio_path="/")
+
+
+async def emit_limit_reached(sid, reason, participant_id):
+    logger.info(f"Participant {participant_id} blocked by project limit: {reason}")
+    await sio_server.emit(
+        "limit_reached", {"reason": reason, "message": limit_message(reason)}, sid
+    )
+
+
+async def conversation_limit_reached(sid, the_conversation) -> bool:
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    reason = await check_conversation_limits(project, the_conversation)
+    if reason:
+        await emit_limit_reached(sid, reason, the_conversation.participant_id)
+    return reason is not None
 
 
 @sio_server.event
@@ -103,6 +120,11 @@ async def initial_message_to_server(sid, data):
     )
 
     await sio_server.emit("set_participant_id", {"participant_id": participant_id}, sid)
+
+    reason = await check_start_limits(project[0], participant_id)
+    if reason:
+        await emit_limit_reached(sid, reason, participant_id)
+        return
 
     if "model" in data["data"]:
         model = data["data"]["model"]
@@ -217,6 +239,7 @@ async def generate_llm_response(the_conversation, data, sio_server, sid, model):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -257,6 +280,9 @@ async def text_message(sid, data):
     the_conversation = await Conversations.find_one(
         Conversations.conversation_id == data["session_id"]
     )
+    if await conversation_limit_reached(sid, the_conversation):
+        return
+
     the_conversation.messages.append(new_conversation_message)
     await the_conversation.save()
 
@@ -277,6 +303,7 @@ async def text_message(sid, data):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -294,6 +321,9 @@ async def text_message(sid, data):
         # the message is sent to user by chunks
         # here we just save the response.
         await the_conversation.save()
+
+    # close the chat right away when this was the last allowed turn
+    await conversation_limit_reached(sid, the_conversation)
 
 
 @sio_server.event
@@ -318,6 +348,9 @@ async def image_message(sid, data):
     the_conversation = await Conversations.find_one(
         Conversations.conversation_id == data["session_id"]
     )
+    if await conversation_limit_reached(sid, the_conversation):
+        return
+
     the_conversation.messages.append(new_conversation_message)
     await the_conversation.save()
 
@@ -337,6 +370,7 @@ async def image_message(sid, data):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -353,6 +387,9 @@ async def image_message(sid, data):
         # the message is sent to user by chunks
         # here we just save the response.
         await the_conversation.save()
+
+    # close the chat right away when this was the last allowed turn
+    await conversation_limit_reached(sid, the_conversation)
 
 
 @sio_server.event
