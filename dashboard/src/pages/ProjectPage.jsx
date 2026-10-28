@@ -256,6 +256,21 @@ function ProjectPage() {
         <hr />
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          Token usage, estimated cost and participant limits
+        </Typography>
+        <Button
+          variant="contained"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          onClick={() => {
+            navigate(`/project/${projectId}/usage`);
+          }}
+        >
+          Usage & limits
+        </Button>
+
+        <hr />
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
           System Message
         </Typography>
 
