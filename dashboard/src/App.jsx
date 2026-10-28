@@ -19,6 +19,7 @@ import ProjectPage from "./pages/ProjectPage";
 import ConversationPage from "./pages/ConversationPage";
 import SystemMessagePage from "./pages/SystemMessagePage";
 import CreateNewProjectFormPage from "./pages/CreateNewProjectFormPage";
+import UsagePage from "./pages/UsagePage";
 
 function App() {
   const { authData } = useContext(AuthContext);
@@ -64,6 +65,16 @@ function App() {
             element={
               authData?.email ? (
                 <ProjectPage />
+              ) : (
+                <DelayedRedirect to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/project/:project_id/usage"
+            element={
+              authData?.email ? (
+                <UsagePage />
               ) : (
                 <DelayedRedirect to="/login" replace />
               )
