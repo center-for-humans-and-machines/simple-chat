@@ -19,6 +19,8 @@ const ChatPage: React.FC = () => {
 
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(true);
+  // set when a project limit ends the conversation; the input stays closed
+  const [limitMessage, setLimitMessage] = useState<string>("");
   const [imageFile, setImageFile] = useState(null);
 
   const [urlParams, setUrlParams] = useState<{ [key: string]: any }>({});
@@ -109,6 +111,11 @@ const ChatPage: React.FC = () => {
       }
       console.log("project with this pid did not found", data);
       setIsTyping(true);
+    });
+
+    socket.on("limit_reached", data => {
+      console.log("limit_reached event: ", data);
+      setLimitMessage(data.message);
     });
 
     socket.on("project_info", data => {
@@ -239,14 +246,15 @@ const ChatPage: React.FC = () => {
             marginBottom: "0.65rem"
           }}
         >
-          {isTyping && (
+          {limitMessage && <span>{limitMessage}</span>}
+          {isTyping && !limitMessage && (
             <>
               <span>{projectInfo?.loading_message}</span>
               <BlinkingDots />
             </>
           )}
         </div>
-        {showChatInput && (
+        {showChatInput && !limitMessage && (
           <ChatInputForm
             newMessage={newMessage}
             handleInputChange={handleInputChange}
