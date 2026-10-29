@@ -22,6 +22,8 @@ class Project(Document):
     loading_message: Optional[str] = None
     active: bool
     openai_backend: Optional[str] = "azure"
+    # used when the chat URL has no `model` query parameter
+    model: Optional[str] = None
     limits: ProjectLimits = Field(default_factory=ProjectLimits)
 
 

@@ -9,6 +9,17 @@ The dashboard is built with [React](https://react.dev/) and [Material-UI](https:
 Define the credentials `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_USERNAME_ADMIN` in the `.env` file to login to dashboard and create projects.
 Note: `DASHBOARD_USERNAME_ADMIN` in `.env` must be an email including `@`.
 
+To log in as admin, enter `DASHBOARD_USERNAME_ADMIN` as the email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
+
+### Creating a Project
+
+As admin, click **Create a new project** and fill in:
+
+- Project ID (lowercase letters, numbers and underscores)
+- E-mail of the researcher who owns the project (prefilled with the admin email; the researcher logs in with this email and the project ID)
+- Model (the default model when the chat URL has no `model` parameter)
+- System message
+
 ### User
 
 To access the dashboard, navigate to the dashboard URL and sign in with:
@@ -22,7 +33,8 @@ The login authenticates against the backend at `/dashboard/login/{email}/{projec
 
 After logging in, you can view all projects associated with your email address. For each project, you can:
 
-- View project details (creation date, status, OpenAI backend)
+- View project details (creation date, status, OpenAI backend, default model)
+- Copy the iframe code that embeds the chat in a survey, or open a test chat
 - Toggle project status between active and deactive
 - Switch between OpenAI backends (OpenAI or Azure)
 - Edit the system message
@@ -43,6 +55,7 @@ Each conversation displays the complete chat history and metadata in JSON format
 ## Environment Variables
 
 Set the backend URL via the `REACT_APP_BACKEND_URL` environment variable. If not set, it defaults to `http://localhost:8000`.
+Set the participant-facing chat URL used in the iframe code via `REACT_APP_FRONTEND_URL`. If not set, it defaults to `http://localhost:1234`.
 
 ## Updating the Logo
 

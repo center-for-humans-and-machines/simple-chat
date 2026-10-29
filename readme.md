@@ -44,8 +44,8 @@ Below are diagrams illustrating the architecture and chat interface:
     cp backend/env.example backend/.env
     ```
 
-    All variables defined in [`settings.py`](./backend/src/models/settings.py) must be set in the `.env` file.
-    `AZURE_OPENAI_BASE_URL` and `AZURE_OPENAI_API_KEY` can be left empty if not using Azure OpenAI.
+    Variables are described in [`env.example`](./backend/env.example) and [`settings.py`](./backend/src/models/settings.py).
+    Azure OpenAI, Together.ai and object storage (S3) variables can be left empty if not used; S3 is only needed for participant image uploads.
 
   - Create `.env` file in the **frontend** directory by copying the [`env.example`](./frontend/env.example) file:
 
@@ -54,6 +54,45 @@ Below are diagrams illustrating the architecture and chat interface:
     ```
 
     The default values can be used for local development.
+
+## Quick Start
+
+Run Simple Chat locally and hold a first test conversation. You only need Docker and an OpenAI API key.
+
+1. Clone the repository and create the `.env` files:
+
+   ```bash
+   git clone https://github.com/center-for-humans-and-machines/simple-chat.git
+   cd simple-chat
+   cp backend/env.example backend/.env
+   cp frontend/env.example frontend/.env
+   ```
+
+1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional.
+
+1. Start the development stack:
+
+   ```bash
+   docker compose --profile dev up --build
+   ```
+
+   The first build takes a few minutes. The chat frontend runs on <http://localhost:1234>, the dashboard on <http://localhost:3001> and the backend on <http://localhost:8000>.
+
+1. Open the dashboard and log in with `DASHBOARD_USERNAME_ADMIN` as email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
+
+1. Click **Create a new project**, enter a project ID (e.g. `my_study`), choose a model, write a system message and click **Create the project**.
+
+1. On the project page, click **Open test chat** to chat with the model, or **Copy iframe code** to embed the chat in your survey, for example:
+
+   ```html
+   <iframe src="http://localhost:1234/?pid=my_study&participant_id=PARTICIPANT_ID" width="100%" height="600" style="border:none;"></iframe>
+   ```
+
+   Replace `PARTICIPANT_ID` with your survey platform's participant variable. See [Integrating Into Online Experiments](./docs/readme.md#integrating-into-online-experiments) for the optional query parameters.
+
+1. Back on the project page, click **Download Conversations as JSON** to export the data.
+
+To make Simple Chat reachable by participants, deploy it to a server as described in the [deployment](./docs/deployment.md) documentation.
 
 ## Installation
 

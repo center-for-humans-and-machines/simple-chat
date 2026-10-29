@@ -7,6 +7,7 @@ from src.models import get_settings
 from src.models.message import ConversationMessage, Conversations
 from src.models.models import Project
 from src.utils.db import create_image, create_message
+from src.utils.configs import models
 from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
@@ -129,13 +130,21 @@ async def initial_message_to_server(sid, data):
     if "model" in data["data"]:
         model = data["data"]["model"]
     else:
-        model = settings.openai_default_model
+        model = project[0].model or settings.openai_default_model
 
     if model == "deepseekr1":
         model = "together_ai-deepseek-ai/DeepSeek-R1"  # because of the / in the name of the model.
 
     elif model == "Llama-3.3-70B-Instruct-Turbo":
         model = "together_ai-meta-llama/Llama-3.3-70B-Instruct-Turbo"  # because of the / in the name of the model.
+
+    if model not in models["openai"] + models["together_ai"]:
+        await sio_server.emit(
+            "pid_not_found",
+            {"message": f"model {model} is not supported."},
+            sid,
+        )
+        return
 
     current_round_number = 0
     if "round" in data["data"]:

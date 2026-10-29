@@ -24,6 +24,11 @@ function ProjectPage() {
   const [filteredList, setFilteredList] = useState([]);
   const [loadingText, setLoadingText] = useState("-");
 
+  const frontendURL =
+    process.env.REACT_APP_FRONTEND_URL || "http://localhost:1234";
+  const chatURL = `${frontendURL}/?pid=${projectId}&participant_id=PARTICIPANT_ID`;
+  const iframeCode = `<iframe src="${chatURL}" width="100%" height="600" style="border:none;"></iframe>`;
+
   const searchFor = valueToSearch => {
     const keysToSearch = [
       "model",
@@ -251,6 +256,46 @@ function ProjectPage() {
           size="small"
         >
           {projectInfo?.openai_backend === "azure" ? "openai" : "azure"}
+        </Button>
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          Default model : {projectInfo?.model || "server default"}
+        </Typography>
+
+        <hr />
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          Embed the chat in your survey (replace PARTICIPANT_ID with your
+          platform's participant variable)
+        </Typography>
+        <Box
+          component="pre"
+          sx={{
+            p: 1,
+            mt: 2,
+            background: "#eee",
+            wordWrap: "break-word",
+            overflowWrap: "break-word",
+            whiteSpace: "pre-wrap"
+          }}
+        >
+          {iframeCode}
+        </Box>
+        <Button
+          variant="contained"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          onClick={() => window.navigator.clipboard.writeText(iframeCode)}
+        >
+          Copy iframe code
+        </Button>
+        <Button
+          variant="outlined"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          href={chatURL.replace("PARTICIPANT_ID", "test_participant")}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open test chat
         </Button>
 
         <hr />

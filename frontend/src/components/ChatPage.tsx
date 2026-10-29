@@ -107,7 +107,7 @@ const ChatPage: React.FC = () => {
       } else if (data.message.includes("not found")) {
         alert("PID not found.");
       } else {
-        alert("This project is not accessible.");
+        alert(data.message || "This project is not accessible.");
       }
       console.log("project with this pid did not found", data);
       setIsTyping(true);
