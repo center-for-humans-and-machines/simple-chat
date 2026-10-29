@@ -97,7 +97,7 @@ async def list_of_conversations(project_id: str, backend: str):
     if backend not in ("azure", "openai"):
         raise HTTPException(status_code=501, detail="unvalid backend")
 
-    project.open_ai_backend = backend
+    project.openai_backend = backend
 
     await project.save()
     return {"status": True}

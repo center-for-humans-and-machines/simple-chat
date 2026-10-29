@@ -17,15 +17,18 @@ from src.utils.logging import setup_logger
 logger = setup_logger(__name__)
 
 settings = get_settings()
-s3_session = boto3.session.Session()
-s3 = s3_session.client(
-    service_name="s3",
-    aws_access_key_id=settings.s3_access_key,
-    aws_secret_access_key=settings.s3_secret_key,
-    endpoint_url=settings.s3_endpoint,
-    config=Config(signature_version="s3v4"),
-    region_name=settings.s3_region_name,
-)
+# object storage is optional and only used for participant image uploads
+s3 = None
+if settings.s3_bucket_name:
+    s3_session = boto3.session.Session()
+    s3 = s3_session.client(
+        service_name="s3",
+        aws_access_key_id=settings.s3_access_key or None,
+        aws_secret_access_key=settings.s3_secret_key or None,
+        endpoint_url=settings.s3_endpoint or None,
+        config=Config(signature_version="s3v4"),
+        region_name=settings.s3_region_name or None,
+    )
 
 
 async def store_search_parameters(search_params_data, session_id):
@@ -84,6 +87,8 @@ async def get_response(
 
 
 async def upload(img, message_id):
+    if s3 is None:
+        raise RuntimeError("Image upload needs object storage: set the S3_* variables.")
     # Decode the base64 string
     img = base64.b64decode(img)
     s3_file_name = f"{message_id}.jpg"
@@ -137,10 +142,4 @@ async def get_openai_backend(project_id):
     if len(projects) == 0:
         return "not found"
 
-    project = projects[0]
-
-    if "openai_backend" in project:
-        return project.openai_backend
-
-    else:
-        return "azure"  # default mode
+    return projects[0].openai_backend or "azure"  # default mode

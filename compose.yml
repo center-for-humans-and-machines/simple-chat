@@ -45,7 +45,7 @@ services:
       - frontend-backend
     restart: always
     healthcheck:
-      test: curl --fail http://localhost:8080 || exit 1
+      test: curl --fail http://localhost:80 || exit 1
       interval: 60s
       retries: 5
       start_period: 20s
@@ -76,7 +76,7 @@ services:
       context: ./dashboard
       target: production
     ports:
-      - 8080:80
+      - 8081:80
     networks:
       - frontend-backend
     depends_on:
@@ -84,14 +84,13 @@ services:
     volumes:
       - ./dashboard:/usr/src/app
       - /usr/src/app/node_modules
-    env_file: .env
     environment:
       - REACT_APP_BACKEND_URL=http://localhost:8000
       - REACT_APP_BACKEND_SOCKET_URL=localhost:8000
       - NODE_ENV=production
     restart: always
     healthcheck:
-      test: curl --fail http://localhost:8080 || exit 1
+      test: curl --fail http://localhost:80 || exit 1
       interval: 60s
       retries: 5
       start_period: 20s
@@ -114,6 +113,7 @@ services:
       - /usr/src/app/node_modules
     environment:
       - REACT_APP_BACKEND_URL=http://localhost:8000
+      - REACT_APP_FRONTEND_URL=http://localhost:1234
       - NODE_ENV=development
       - PORT=3001
 

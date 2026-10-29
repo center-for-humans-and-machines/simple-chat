@@ -1,13 +1,18 @@
 # routes.py
 import re
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from src.models import get_settings
 from src.models.models import CustomSystemMessage, Project
+from src.utils.configs import models
 from src.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
+
+settings = get_settings()
 
 project_router = APIRouter(prefix="/project", tags=["project"])
 
@@ -16,6 +21,7 @@ class ProjectRegisterInput(BaseModel):
     project_id: str
     requested_by: str
     system_message: str
+    model: Optional[str] = None
 
 
 class CustomSystemMessageInput(BaseModel):
@@ -24,6 +30,14 @@ class CustomSystemMessageInput(BaseModel):
     requested_by: str
     assistant_first: bool
     first_message: str
+
+
+@project_router.get("/models")
+async def available_models():
+    return {
+        "models": models["openai"] + models["together_ai"],
+        "default": settings.openai_default_model,
+    }
 
 
 @project_router.post("/register")
@@ -42,12 +56,17 @@ async def send_message(data: ProjectRegisterInput):
             status_code=400, detail="there is already a project with this project_id"
         )
 
+    if data.model and data.model not in models["openai"] + models["together_ai"]:
+        raise HTTPException(status_code=400, detail=f"unknown model: {data.model}")
+
     new_project = Project(
         project_id=data.project_id,
         created_by=data.requested_by,
         system_message=data.system_message,
         created_at=str(datetime.now()),
         active=True,
+        openai_backend=settings.openai_backend,
+        model=data.model or None,
     )
 
     await new_project.insert()

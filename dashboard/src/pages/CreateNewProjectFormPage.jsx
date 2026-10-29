@@ -1,21 +1,47 @@
-import React, { useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   Typography,
   Button,
   TextareaAutosize,
   Container,
   TextField,
+  MenuItem,
   Box
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
+import { AuthContext } from "../contexts/AuthContext";
 
 function CreateNewProjectFormPage() {
+  const { authData } = useContext(AuthContext);
   const [projectId, setProjectId] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(authData.email);
   const [systemMessage, setSystemMessage] = useState("");
+  const [model, setModel] = useState("");
+  const [modelOptions, setModelOptions] = useState([]);
   const navigate = useNavigate();
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const getModels = async () => {
+      try {
+        let backendURL =
+          process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+        const response = await fetch(`${backendURL}/project/models`);
+
+        if (!response.ok) {
+          throw new Error("failure!");
+        }
+
+        const data = await response.json();
+        setModelOptions(data.models);
+        setModel(data.default);
+      } catch (error) {
+        console.error("Error getting models:", error.message);
+      }
+    };
+    getModels();
+  }, []);
 
   const createSystemMessage = async () => {
     setError("");
@@ -43,7 +69,8 @@ function CreateNewProjectFormPage() {
     const payload = {
       project_id: projectId.trim(),
       requested_by: email.trim(),
-      system_message: systemMessage.trim()
+      system_message: systemMessage.trim(),
+      model: model
     };
 
     try {
@@ -77,7 +104,7 @@ function CreateNewProjectFormPage() {
 
       if (data.status === true) {
         alert("✅ Project created successfully!");
-        navigate("/");
+        navigate(`/project/${payload.project_id}`);
       } else {
         // alert("⚠️ Failed to create project. Please try again. ");
         setError(data.detail);
@@ -127,6 +154,24 @@ function CreateNewProjectFormPage() {
           value={email}
           onChange={e => setEmail(e.target.value)}
         />
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          Model
+        </Typography>
+        <TextField
+          select
+          label="used when the chat URL has no model parameter"
+          variant="outlined"
+          fullWidth
+          value={modelOptions.includes(model) ? model : ""}
+          onChange={e => setModel(e.target.value)}
+        >
+          {modelOptions.map(option => (
+            <MenuItem key={option} value={option}>
+              {option}
+            </MenuItem>
+          ))}
+        </TextField>
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
           System Message
