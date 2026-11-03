@@ -16,7 +16,7 @@ Install your development environment with the following instructions:
 
 ## Usage
 
-For linting the codebase using GitHub Actions we use both [pre-commit](https://pre-commit.com/) and [super-linter](https://github.com/super-linter/super-linter). The scripts below assume you are in the root directory of the project.
+For linting the codebase we use both [pre-commit](https://pre-commit.com/) and [super-linter](https://github.com/super-linter/super-linter). The scripts below assume you are in the root directory of the project.
 
 - Lint the code locally (runs both pre-commit and super-linter)
 
