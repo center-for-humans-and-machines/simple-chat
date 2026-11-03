@@ -33,50 +33,40 @@ Below are diagrams illustrating the architecture and chat interface:
 </p>
 </details>
 
+## Tutorial
+
+[![Watch the tutorial video](https://img.youtube.com/vi/M8G7-EQHCxc/hqdefault.jpg)](https://youtu.be/M8G7-EQHCxc)
+
+[Watch the tutorial video](https://youtu.be/M8G7-EQHCxc) for a first-time installation walkthrough.
+
 ## Requirements
 
-- Install [Docker](https://docs.docker.com/desktop/install/mac-install/) version `24.0.5, build ced0996` or newer
-- Install [Docker Compose plugin](https://docs.docker.com/compose/install/linux/) version `v2.20.2-desktop.1` or newer
-- Define secrets
-  - Create `.env` file in the **backend** directory by copying the [`env.example`](./backend/env.example) file:
+- [Docker](https://docs.docker.com/get-docker/) with the [Docker Compose plugin](https://docs.docker.com/compose/install/) (`docker compose version` should print v2.20 or newer)
+- An [OpenAI API key](https://platform.openai.com/api-keys)
 
-    ```bash
-    cp backend/env.example backend/.env
-    ```
+All settings live in a single `.env` file in the repository root. Copy [`.env.example`](./.env.example) and fill in `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional and described in [`.env.example`](./.env.example) and [`settings.py`](./backend/src/models/settings.py).
 
-    Variables are described in [`env.example`](./backend/env.example) and [`settings.py`](./backend/src/models/settings.py).
-    Azure OpenAI, Together.ai and object storage (S3) variables can be left empty if not used; S3 is only needed for participant image uploads.
+## Quick Start (local)
 
-  - Create `.env` file in the **frontend** directory by copying the [`env.example`](./frontend/env.example) file:
+Run Simple Chat on your computer and hold a first test conversation.
 
-    ```bash
-    cp frontend/env.example frontend/.env
-    ```
-
-    The default values can be used for local development.
-
-## Quick Start
-
-Run Simple Chat locally and hold a first test conversation. You only need Docker and an OpenAI API key.
-
-1. Clone the repository and create the `.env` files:
+1. Clone the repository and create the `.env` file:
 
    ```bash
    git clone https://github.com/center-for-humans-and-machines/simple-chat.git
    cd simple-chat
-   cp backend/env.example backend/.env
-   cp frontend/env.example frontend/.env
+   cp .env.example .env
    ```
 
-1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional.
+1. In `.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` and `DASHBOARD_PASSWORD_ADMIN`.
 
-1. Start the development stack:
+1. Start Simple Chat:
 
    ```bash
    docker compose --profile dev up --build
    ```
 
-   The first build takes a few minutes. The chat frontend runs on <http://localhost:1234>, the dashboard on <http://localhost:3001> and the backend on <http://localhost:8000>.
+   The first build takes a few minutes. The chat frontend runs on <http://localhost:1234>, the dashboard on <http://localhost:3001> and the backend on <http://localhost:8000>. Press `Ctrl+C` to stop.
 
 1. Open the dashboard and log in with `DASHBOARD_USERNAME_ADMIN` as email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
 
@@ -92,12 +82,60 @@ Run Simple Chat locally and hold a first test conversation. You only need Docker
 
 1. Back on the project page, click **Download Conversations as JSON** to export the data.
 
-To make Simple Chat reachable by participants, deploy it to a server as described in the [deployment](./docs/deployment.md) documentation.
+## Production (single server)
 
-## Installation
+To make Simple Chat reachable by participants, run it on one server, for example a virtual private server (VPS) with Docker installed. The `prod` profile builds the frontend and dashboard once and serves them with nginx.
 
-- Refer to the [deployment](./docs/deployment.md) documentation for first-time installation.
-- Refer to the [contributing](./contributing.md) documentation to set up a development environment for modifying the code.
+1. Point three domain names at the server, for example `chat.example.com` (participants), `dashboard.example.com` (researchers) and `api.example.com` (backend).
+
+1. Clone the repository on the server and create `.env` as above. In addition, set the public URLs:
+
+   ```bash
+   CHAT_URL=https://chat.example.com
+   BACKEND_URL=https://api.example.com
+   CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com
+   TRUST_X_FORWARDED_FOR=true
+   ```
+
+   `CHAT_URL` and `BACKEND_URL` are built into the frontend and dashboard, so rebuild (step 3) after changing them.
+
+1. Build and start Simple Chat in the background:
+
+   ```bash
+   docker compose --profile prod up --build --detach
+   ```
+
+   The chat frontend listens on port 8080, the dashboard on 8081 and the backend on 8000. The database is only reachable from the server itself.
+
+1. Serve the three ports over HTTPS, which survey platforms require for iframes. For example, with [Caddy](https://caddyserver.com/docs/install) installed on the server, this `Caddyfile` obtains certificates automatically:
+
+   ```text
+   chat.example.com {
+       reverse_proxy localhost:8080
+   }
+   dashboard.example.com {
+       reverse_proxy localhost:8081
+   }
+   api.example.com {
+       reverse_proxy localhost:8000
+   }
+   ```
+
+Useful commands, run from the repository root:
+
+```bash
+docker compose --profile prod logs --follow     # show logs
+docker compose --profile prod stop              # stop, keeping the data
+git pull && docker compose --profile prod up --build --detach  # update
+docker compose exec db mongodump --archive > backup.archive    # back up the database
+docker compose --profile prod down --volumes    # remove everything, including the database
+```
+
+Replace `prod` with `dev` for the local setup. See [deployment](./docs/deployment.md) for details on the two profiles and on optional error tracking and LLM observability.
+
+## Development
+
+Refer to the [contributing](./contributing.md) documentation to set up a development environment for modifying the code.
 
 ## Usage
 
@@ -121,11 +159,11 @@ Each project can limit how participants use the chat. Set the limits in the dash
 
 When a limit is reached, the participant sees a short message instead of an error, and the chat input closes. The message does not say which limit was reached. A rate-limited message is not sent: it goes back into the input field with a notice to wait. Chat token counts are estimates made with tiktoken, so a conversation can go slightly over its cap with the last reply.
 
-**Rate limits behind a proxy.** By default the backend uses the address of the connection as the participant's IP. Behind a reverse proxy or Kubernetes ingress this is the proxy's address, so set `TRUST_X_FORWARDED_FOR=true` in `backend/.env` to use the `X-Forwarded-For` header instead. Only enable it when a proxy sets this header, because participants can otherwise send their own.
+**Rate limits behind a proxy.** By default the backend uses the address of the connection as the participant's IP. Behind a reverse proxy this is the proxy's address, so set `TRUST_X_FORWARDED_FOR=true` in `.env` to use the `X-Forwarded-For` header instead. Only enable it when a proxy sets this header, because participants can otherwise send their own.
 
-**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site. The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml); in Kubernetes, set it to the backend URL). Without `BACKEND_INTERNAL_URL` the header is not sent. In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
+**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site. The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml)). Without `BACKEND_INTERNAL_URL` the header is not sent. In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
 
-**CORS.** `CORS_ALLOWED_ORIGINS` in `backend/.env` limits which origins may call the backend. The default `*` allows all. Set it to the chat frontend and dashboard origins, e.g. `CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com`. The survey's origin is not needed, because the chat inside the iframe calls the backend from the frontend's origin.
+**CORS.** `CORS_ALLOWED_ORIGINS` in `.env` limits which origins may call the backend. The default `*` allows all. Set it to the chat frontend and dashboard origins, e.g. `CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com`. The survey's origin is not needed, because the chat inside the iframe calls the backend from the frontend's origin.
 
 ## Citation
 

@@ -24,17 +24,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New projects use the `OPENAI_BACKEND` setting (default `openai`) instead of always `azure`
 - S3, Azure OpenAI and Together.ai variables are optional; S3 is only needed for image uploads
 - Dashboard (production profile) runs on port 8081 so it no longer clashes with the frontend
+- Single `.env` file in the repository root (from `.env.example`) replaces `backend/.env` and `frontend/.env`
+- Production frontend and dashboard take their public URLs from `CHAT_URL` and `BACKEND_URL` at build time
+- Readme documents Docker Compose commands for a local run and for a production run on a single server
+- MongoDB port is only published on `127.0.0.1`
 
 ### Deprecated
 
 ### Fixed
 
+- Frontend Sentry no longer initializes when `SENTRY_ENABLED=false`
 - Switching a project's OpenAI backend in the dashboard had no effect
 - Unsupported `model` values now show an error in the chat instead of failing silently
 
 ### Security
 
 ### Removed
+
+- GitHub Actions workflows (deployment and super-linter)
+- Kubernetes manifests and Helm chart
+- Start, stop, build and destroy scripts in `script/`; use the Docker Compose commands in the readme
+- `chat_input=false` query parameter that hid the chat input
 
 ## [1.0.0] - 2025-11-03
 
