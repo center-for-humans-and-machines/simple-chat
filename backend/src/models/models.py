@@ -1,5 +1,7 @@
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
+import pymongo
 from beanie import Document
 from pydantic import BaseModel, Field
 
@@ -12,6 +14,11 @@ class ProjectLimits(BaseModel):
     max_tokens_per_project: Optional[int] = Field(default=None, ge=1)
     # empty list means every participant is allowed
     participant_allowlist: List[str] = Field(default_factory=list)
+    # at most rate_limit_messages conversation starts and messages per
+    # rate_limit_window_seconds, counted per participant_id or per IP address
+    rate_limit_messages: Optional[int] = Field(default=None, ge=1)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=24 * 60 * 60)
+    rate_limit_key: Literal["participant", "ip"] = "participant"
 
 
 class Project(Document):
@@ -54,3 +61,16 @@ class TokenUsage(Document):
     estimated: bool = False
     source: str = "chat"  # "chat" (participant conversations) or "llm_api" (/llm/* routes)
     created_at: str
+
+
+class RateLimitEvent(Document):
+    project_id: str
+    key: str  # "participant:<id>" or "ip:<address>"
+    created_at: datetime
+
+    class Settings:
+        indexes = [
+            [("project_id", pymongo.ASCENDING), ("key", pymongo.ASCENDING), ("created_at", pymongo.ASCENDING)],
+            # events are only needed for the length of a window
+            pymongo.IndexModel([("created_at", pymongo.ASCENDING)], expireAfterSeconds=24 * 60 * 60),
+        ]

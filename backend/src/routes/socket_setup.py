@@ -12,7 +12,8 @@ from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
                                store_search_parameters, upload)
-from src.utils.limits import (check_conversation_limits, check_start_limits,
+from src.utils.limits import (RATE_LIMITED_MESSAGE, check_conversation_limits,
+                              check_rate_limit, check_start_limits,
                               limit_message)
 from src.utils.llm_model import init_model_endpoint
 from src.utils.logging import setup_logger
@@ -40,9 +41,31 @@ async def conversation_limit_reached(sid, the_conversation) -> bool:
     return reason is not None
 
 
+async def rate_limited(sid, project, participant_id, stage) -> bool:
+    session = await sio_server.get_session(sid)
+    retry_after = await check_rate_limit(project, participant_id, session.get("ip"))
+    if retry_after is not None:
+        logger.info(f"Participant {participant_id} rate limited for {retry_after}s")
+        await sio_server.emit(
+            "rate_limited",
+            {"stage": stage, "retry_after": retry_after, "message": RATE_LIMITED_MESSAGE},
+            sid,
+        )
+    return retry_after is not None
+
+
+def client_ip(environ):
+    forwarded_for = environ.get("HTTP_X_FORWARDED_FOR")
+    if settings.trust_x_forwarded_for and forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    client = environ["asgi.scope"].get("client")
+    return client[0] if client else None
+
+
 @sio_server.event
 async def connect(sid, environ, auth):
     logger.info(f"Client is connected with sid : {sid}")
+    await sio_server.save_session(sid, {"ip": client_ip(environ)})
     session_id = uuid.uuid4().hex
     await sio_server.emit("session_id", {"session_id": session_id}, sid)
 
@@ -125,6 +148,9 @@ async def initial_message_to_server(sid, data):
     reason = await check_start_limits(project[0], participant_id)
     if reason:
         await emit_limit_reached(sid, reason, participant_id)
+        return
+
+    if await rate_limited(sid, project[0], participant_id, "start"):
         return
 
     if "model" in data["data"]:
@@ -289,6 +315,10 @@ async def text_message(sid, data):
     the_conversation = await Conversations.find_one(
         Conversations.conversation_id == data["session_id"]
     )
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    if await rate_limited(sid, project, the_conversation.participant_id, "message"):
+        return
+
     if await conversation_limit_reached(sid, the_conversation):
         return
 
@@ -337,6 +367,16 @@ async def text_message(sid, data):
 
 @sio_server.event
 async def image_message(sid, data):
+    the_conversation = await Conversations.find_one(
+        Conversations.conversation_id == data["session_id"]
+    )
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    if await rate_limited(sid, project, the_conversation.participant_id, "message"):
+        return
+
+    if await conversation_limit_reached(sid, the_conversation):
+        return
+
     message = create_image(
         content="",
     )
@@ -354,12 +394,6 @@ async def image_message(sid, data):
         timestamp=str(datetime.now()),
         type="image",
     )
-    the_conversation = await Conversations.find_one(
-        Conversations.conversation_id == data["session_id"]
-    )
-    if await conversation_limit_reached(sid, the_conversation):
-        return
-
     the_conversation.messages.append(new_conversation_message)
     await the_conversation.save()
 

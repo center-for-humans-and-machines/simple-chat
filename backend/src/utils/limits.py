@@ -1,11 +1,13 @@
+from datetime import datetime, timedelta
 from typing import Optional
 
 from src.models.message import Conversations
-from src.models.models import Project, TokenUsage
+from src.models.models import Project, RateLimitEvent, TokenUsage
 
 # Messages shown to participants. They deliberately do not say which limit was hit.
 NOT_ALLOWED_MESSAGE = "You are not registered for this study, so the chat is not available."
 LIMIT_REACHED_MESSAGE = "This conversation has reached its limit and has ended. Thank you for participating."
+RATE_LIMITED_MESSAGE = "You are sending messages too quickly. Please wait a moment and try again."
 
 
 async def used_tokens(query: dict) -> int:
@@ -71,3 +73,45 @@ async def check_conversation_limits(project: Project, conversation: Conversation
 
 def limit_message(reason: str) -> str:
     return NOT_ALLOWED_MESSAGE if reason == "not_allowed" else LIMIT_REACHED_MESSAGE
+
+
+def rate_limit_key(project: Project, participant_id, ip: Optional[str]) -> Optional[str]:
+    # without a participant_id the IP address is the only thing to count by
+    if project.limits.rate_limit_key == "participant" and participant_id not in (None, -1, "-1"):
+        return f"participant:{participant_id}"
+    if ip:
+        return f"ip:{ip}"
+    return None
+
+
+async def check_rate_limit(project: Project, participant_id, ip: Optional[str]) -> Optional[int]:
+    """Record one conversation start or message.
+
+    Return the seconds to wait when the rate limit is exceeded, or None.
+    """
+    limits = project.limits
+    if limits.rate_limit_messages is None:
+        return None
+
+    key = rate_limit_key(project, participant_id, ip)
+    if key is None:
+        return None
+
+    now = datetime.utcnow()
+    window_start = now - timedelta(seconds=limits.rate_limit_window_seconds)
+    events = (
+        await RateLimitEvent.find(
+            {"project_id": project.project_id, "key": key, "created_at": {"$gt": window_start}}
+        )
+        .sort("created_at")
+        .to_list()
+    )
+
+    if len(events) >= limits.rate_limit_messages:
+        # the oldest counted event leaving the window frees the next slot
+        oldest = events[len(events) - limits.rate_limit_messages]
+        wait = oldest.created_at - window_start
+        return max(1, int(wait.total_seconds()) + 1)
+
+    await RateLimitEvent(project_id=project.project_id, key=key, created_at=now).insert()
+    return None
