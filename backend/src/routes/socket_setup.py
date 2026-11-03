@@ -21,7 +21,9 @@ from src.utils.logging import setup_logger
 settings = get_settings()
 logger = setup_logger(__name__)
 
-sio_server = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+sio_server = socketio.AsyncServer(
+    async_mode="asgi", cors_allowed_origins=settings.cors_origins()
+)
 
 sio_app = socketio.ASGIApp(socketio_server=sio_server, socketio_path="/")
 
@@ -145,7 +147,9 @@ async def initial_message_to_server(sid, data):
 
     await sio_server.emit("set_participant_id", {"participant_id": participant_id}, sid)
 
-    reason = await check_start_limits(project[0], participant_id)
+    reason = await check_start_limits(
+        project[0], participant_id, data.get("embed_origin")
+    )
     if reason:
         await emit_limit_reached(sid, reason, participant_id)
         return

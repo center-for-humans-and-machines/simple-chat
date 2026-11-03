@@ -24,6 +24,8 @@ RUN echo "production stage"
 
 # Copy built files to Nginx web root
 COPY --from=build /usr/src/app/dist /usr/share/nginx/html
+# Adds the per-project frame-ancestors header when BACKEND_INTERNAL_URL is set
+COPY --chmod=755 nginx/40-embed-policy.sh /docker-entrypoint.d/40-embed-policy.sh
 
 # Expose port
 EXPOSE 80

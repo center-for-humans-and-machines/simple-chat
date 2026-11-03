@@ -49,7 +49,8 @@ const emptyLimitsForm = {
   rate_limit_messages: "",
   rate_limit_window_seconds: defaultRateLimitWindow,
   rate_limit_key: "participant",
-  participant_allowlist: ""
+  participant_allowlist: "",
+  allowed_embed_origins: ""
 };
 
 const limitsToForm = limits => ({
@@ -59,8 +60,15 @@ const limitsToForm = limits => ({
   rate_limit_window_seconds:
     limits?.rate_limit_window_seconds ?? defaultRateLimitWindow,
   rate_limit_key: limits?.rate_limit_key || "participant",
-  participant_allowlist: (limits?.participant_allowlist || []).join("\n")
+  participant_allowlist: (limits?.participant_allowlist || []).join("\n"),
+  allowed_embed_origins: (limits?.allowed_embed_origins || []).join("\n")
 });
+
+const splitList = text =>
+  text
+    .split(/[\n,]/)
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
 
 const formToLimits = form => ({
   ...Object.fromEntries(
@@ -74,10 +82,8 @@ const formToLimits = form => ({
       ? defaultRateLimitWindow
       : parseInt(form.rate_limit_window_seconds, 10),
   rate_limit_key: form.rate_limit_key,
-  participant_allowlist: form.participant_allowlist
-    .split(/[\n,]/)
-    .map(item => item.trim())
-    .filter(item => item.length > 0)
+  participant_allowlist: splitList(form.participant_allowlist),
+  allowed_embed_origins: splitList(form.allowed_embed_origins)
 });
 
 function UsagePage() {
@@ -156,14 +162,19 @@ function UsagePage() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to update limits!");
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.detail === "string"
+            ? body.detail
+            : "Failed to update limits!"
+        );
       }
 
       setLimitsForm(limitsToForm(await response.json()));
       alert("Limits updated successfully.");
     } catch (error) {
       console.error("Error:", error.message);
-      alert("There was an error updating the limits.");
+      alert(`There was an error updating the limits: ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -357,6 +368,25 @@ function UsagePage() {
             setLimitsForm({
               ...limitsForm,
               participant_allowlist: e.target.value
+            })
+          }
+        />
+
+        <TextField
+          label="Allowed embedding origins"
+          multiline
+          minRows={2}
+          fullWidth
+          size="small"
+          sx={{ mt: 2 }}
+          placeholder="Any site may embed the chat"
+          helperText="One origin per line, e.g. https://*.qualtrics.com. Only these sites may show the chat in an iframe."
+          InputLabelProps={{ shrink: true }}
+          value={limitsForm.allowed_embed_origins}
+          onChange={e =>
+            setLimitsForm({
+              ...limitsForm,
+              allowed_embed_origins: e.target.value
             })
           }
         />

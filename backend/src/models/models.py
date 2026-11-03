@@ -19,6 +19,9 @@ class ProjectLimits(BaseModel):
     rate_limit_messages: Optional[int] = Field(default=None, ge=1)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=24 * 60 * 60)
     rate_limit_key: Literal["participant", "ip"] = "participant"
+    # origins (e.g. https://*.qualtrics.com) allowed to embed the chat in an
+    # iframe; empty list means any site may embed it
+    allowed_embed_origins: List[str] = Field(default_factory=list)
 
 
 class Project(Document):

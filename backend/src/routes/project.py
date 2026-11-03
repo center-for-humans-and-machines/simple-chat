@@ -2,12 +2,14 @@
 import re
 from datetime import datetime
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel
 from src.models import get_settings
 from src.models.models import CustomSystemMessage, Project
 from src.utils.configs import models
+from src.utils.limits import frame_ancestors_policy
 from src.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
@@ -38,6 +40,28 @@ async def available_models():
         "models": models["openai"] + models["together_ai"],
         "default": settings.openai_default_model,
     }
+
+
+@project_router.get("/embed-policy")
+async def embed_policy(
+    response: Response,
+    pid: Optional[str] = None,
+    x_original_uri: Optional[str] = Header(default=None),
+):
+    """Set the chat page's Content-Security-Policy for a project.
+
+    The frontend nginx calls this with auth_request and forwards the header;
+    it passes the chat URL in X-Original-URI.
+    """
+    if pid is None and x_original_uri:
+        pid = parse_qs(urlparse(x_original_uri).query).get("pid", [None])[0]
+
+    project = await Project.find_one({"project_id": pid}) if pid else None
+    policy = frame_ancestors_policy(project) if project else None
+    if policy:
+        response.headers["Content-Security-Policy"] = policy
+
+    return {}
 
 
 @project_router.post("/register")
