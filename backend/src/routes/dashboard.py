@@ -1,5 +1,6 @@
 # routes.py
 import os
+import re
 
 from fastapi import APIRouter, Body, HTTPException
 from src.models.message import Conversations
@@ -9,6 +10,9 @@ from src.utils.logging import setup_logger
 from src.utils.usage import summarize_usage
 
 logger = setup_logger(__name__)
+
+# scheme, host (optionally starting with *.) and port, as allowed in frame-ancestors
+EMBED_ORIGIN_PATTERN = re.compile(r"^https?://(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*(:\d+)?$")
 
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -159,6 +163,19 @@ async def update_limits(project_id: str, limits: ProjectLimits):
     limits.participant_allowlist = sorted(
         {pid.strip() for pid in limits.participant_allowlist if pid.strip()}
     )
+    limits.allowed_embed_origins = sorted(
+        {
+            origin.strip().lower().rstrip("/")
+            for origin in limits.allowed_embed_origins
+            if origin.strip()
+        }
+    )
+    for origin in limits.allowed_embed_origins:
+        if not EMBED_ORIGIN_PATTERN.match(origin):
+            raise HTTPException(
+                status_code=400,
+                detail=f"invalid embedding origin: {origin} (expected e.g. https://example.com or https://*.example.com)",
+            )
     project.limits = limits
     await project.save()
 

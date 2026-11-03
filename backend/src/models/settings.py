@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseSettings, Field
 
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     openai_base_url: Optional[str] = Field(default=None, env="OPENAI_BASE_URL")
     together_ai_key: Optional[str] = Field(default=None, env="TOGETHER_AI_KEY")
     together_ai_url: Optional[str] = Field(default=None, env="TOGETHER_AI_URL")
+    # Comma-separated origins of the chat frontend and dashboard allowed to call
+    # the backend, e.g. "https://chat.example.com,https://dashboard.example.com"
+    cors_allowed_origins: str = Field(default="*", env="CORS_ALLOWED_ORIGINS")
     # Use the first X-Forwarded-For address as the participant IP for per-IP
     # rate limits. Only enable behind a proxy that sets this header.
     trust_x_forwarded_for: bool = Field(default=False, env="TRUST_X_FORWARDED_FOR")
@@ -44,6 +47,11 @@ class Settings(BaseSettings):
     langfuse_host: Optional[str] = Field(
         default="https://cloud.langfuse.com", env="LANGFUSE_HOST", description="Langfuse host URL"
     )
+
+    def cors_origins(self) -> Union[str, List[str]]:
+        origins = [origin.strip().rstrip("/") for origin in self.cors_allowed_origins.split(",")]
+        origins = [origin for origin in origins if origin]
+        return "*" if not origins or "*" in origins else origins
 
 
 def get_settings():

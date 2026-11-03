@@ -17,6 +17,22 @@ const shouldShowChatInput = (): boolean => {
   return searchParams.get("chat_input") !== "false";
 };
 
+// origin of the page embedding the chat; null when not embedded or unknown
+const getEmbedOrigin = (): string | null => {
+  if (window.self === window.top) {
+    return null;
+  }
+  const ancestors = window.location.ancestorOrigins;
+  if (ancestors && ancestors.length > 0) {
+    return ancestors[0];
+  }
+  try {
+    return document.referrer ? new URL(document.referrer).origin : null;
+  } catch {
+    return null;
+  }
+};
+
 const ChatPage: React.FC = () => {
   const [sessionId, setSessionId] = useState("");
   const [participantId, setParticipantId] = useState("");
@@ -63,7 +79,8 @@ const ChatPage: React.FC = () => {
     if ("pid" in params) {
       await socket.emit("initial_message_to_server", {
         data: params,
-        session_id: sessionId
+        session_id: sessionId,
+        embed_origin: getEmbedOrigin()
       });
     } else {
       alert("PID is not set.");

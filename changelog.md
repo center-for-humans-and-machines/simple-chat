@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Iframe embed code and test chat link on the dashboard project page
 - `GET /project/models` endpoint listing supported models
 - Optional per-project rate limit on conversation starts and messages, counted per participant ID or per IP address (`TRUST_X_FORWARDED_FOR` for deployments behind a proxy)
+- Optional per-project list of origins allowed to embed the chat; the production frontend sends a matching `Content-Security-Policy: frame-ancestors` header when `BACKEND_INTERNAL_URL` is set
+- `CORS_ALLOWED_ORIGINS` setting to restrict which origins may call the backend (default `*`)
 
 ### Changed
 

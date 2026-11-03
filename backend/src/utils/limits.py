@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 from src.models.message import Conversations
 from src.models.models import Project, RateLimitEvent, TokenUsage
@@ -7,6 +7,7 @@ from src.models.models import Project, RateLimitEvent, TokenUsage
 # Messages shown to participants. They deliberately do not say which limit was hit.
 NOT_ALLOWED_MESSAGE = "You are not registered for this study, so the chat is not available."
 LIMIT_REACHED_MESSAGE = "This conversation has reached its limit and has ended. Thank you for participating."
+EMBED_NOT_ALLOWED_MESSAGE = "This chat cannot be used on this website."
 RATE_LIMITED_MESSAGE = "You are sending messages too quickly. Please wait a moment and try again."
 
 
@@ -29,9 +30,39 @@ async def project_token_cap_reached(project: Project) -> bool:
     return cap is not None and await used_tokens({"project_id": project.project_id}) >= cap
 
 
-async def check_start_limits(project: Project, participant_id) -> Optional[str]:
+def origin_allowed(origin: str, allowed_origins: List[str]) -> bool:
+    """Match an origin against entries like https://example.com or https://*.example.com."""
+    origin = origin.lower().rstrip("/")
+    for allowed in allowed_origins:
+        if origin == allowed:
+            return True
+        scheme, wildcard, domain = allowed.partition("://*.")
+        if wildcard and origin.startswith(scheme + "://") and origin.endswith("." + domain):
+            return True
+    return False
+
+
+def frame_ancestors_policy(project: Project) -> Optional[str]:
+    if not project.limits.allowed_embed_origins:
+        return None
+    return "frame-ancestors " + " ".join(project.limits.allowed_embed_origins)
+
+
+async def check_start_limits(
+    project: Project, participant_id, embed_origin: Optional[str] = None
+) -> Optional[str]:
     """Return the reason a participant may not start a conversation, or None."""
     limits = project.limits
+
+    # The browser enforces frame-ancestors where the frontend sends it; this
+    # check covers other deployments and shows a message instead of a blank frame.
+    # embed_origin is None when the chat is not in an iframe or the browser hides the parent.
+    if (
+        limits.allowed_embed_origins
+        and embed_origin
+        and not origin_allowed(embed_origin, limits.allowed_embed_origins)
+    ):
+        return "embed_origin_not_allowed"
 
     if limits.participant_allowlist and str(participant_id) not in limits.participant_allowlist:
         return "not_allowed"
@@ -72,7 +103,11 @@ async def check_conversation_limits(project: Project, conversation: Conversation
 
 
 def limit_message(reason: str) -> str:
-    return NOT_ALLOWED_MESSAGE if reason == "not_allowed" else LIMIT_REACHED_MESSAGE
+    if reason == "not_allowed":
+        return NOT_ALLOWED_MESSAGE
+    if reason == "embed_origin_not_allowed":
+        return EMBED_NOT_ALLOWED_MESSAGE
+    return LIMIT_REACHED_MESSAGE
 
 
 def rate_limit_key(project: Project, participant_id, ip: Optional[str]) -> Optional[str]:

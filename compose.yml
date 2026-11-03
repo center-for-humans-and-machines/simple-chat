@@ -41,6 +41,8 @@ services:
       - backend
     environment:
       - NODE_ENV=production
+      # nginx asks the backend for each project's frame-ancestors policy
+      - BACKEND_INTERNAL_URL=http://backend:8000
     networks:
       - frontend-backend
     restart: always
