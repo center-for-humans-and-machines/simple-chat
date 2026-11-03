@@ -103,6 +103,30 @@ To make Simple Chat reachable by participants, deploy it to a server as describe
 
 Refer to the [documentation](./docs/readme.md) folder for usage instructions.
 
+## Participant Limits
+
+Each project can limit how participants use the chat. Set the limits in the dashboard: open a project and click **Usage & limits**. They are stored on the project in MongoDB (`limits` field) and enforced by the backend. By default every limit is off, so new and existing projects behave as before.
+
+| Limit                             | Default                             | Behavior                                                                                                                                   |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Max conversations per participant | No limit                            | Conversations a `participant_id` may start. Not applied when the chat URL has no `participant_id`; use the allowlist to require one.       |
+| Max turns per conversation        | No limit                            | Participant messages per conversation. The chat closes after the last allowed turn has been answered.                                      |
+| Token cap per conversation        | No limit                            | Prompt and completion tokens per conversation.                                                                                             |
+| Token cap per project             | No limit                            | Prompt and completion tokens across all conversations of the project. Once it is reached, no new conversations start and running ones end. |
+| Participant allowlist             | Empty (everyone may join)           | Participant IDs (e.g. Prolific IDs) allowed to start a conversation, one per line.                                                         |
+| Rate limit                        | No limit                            | Conversation starts and messages per window, see below.                                                                                    |
+| Rate limit window                 | 60 seconds                          | Length of the rate limit window, at most 86400 seconds (one day).                                                                          |
+| Rate limit counted per            | Participant ID                      | `Participant ID` counts per `participant_id`, falling back to the IP address when the URL has none. `IP address` counts per IP address.    |
+| Allowed embedding origins         | Empty (any site may embed the chat) | Origins allowed to show the chat in an iframe, e.g. `https://*.qualtrics.com`, see below.                                                  |
+
+When a limit is reached, the participant sees a short message instead of an error, and the chat input closes. The message does not say which limit was reached. A rate-limited message is not sent: it goes back into the input field with a notice to wait. Chat token counts are estimates made with tiktoken, so a conversation can go slightly over its cap with the last reply.
+
+**Rate limits behind a proxy.** By default the backend uses the address of the connection as the participant's IP. Behind a reverse proxy or Kubernetes ingress this is the proxy's address, so set `TRUST_X_FORWARDED_FOR=true` in `backend/.env` to use the `X-Forwarded-For` header instead. Only enable it when a proxy sets this header, because participants can otherwise send their own.
+
+**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site. The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml); in Kubernetes, set it to the backend URL). Without `BACKEND_INTERNAL_URL` the header is not sent. In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
+
+**CORS.** `CORS_ALLOWED_ORIGINS` in `backend/.env` limits which origins may call the backend. The default `*` allows all. Set it to the chat frontend and dashboard origins, e.g. `CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com`. The survey's origin is not needed, because the chat inside the iframe calls the backend from the frontend's origin.
+
 ## Citation
 
 If you use Simple Chat in your research, please cite as follows:
