@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New projects use the `OPENAI_BACKEND` setting instead of always `azure`. It defaults to `azure`, so existing deployments are unchanged; `.env.example` sets it to `openai`
 - S3, Azure OpenAI and Together.ai variables are optional; S3 is only needed for image uploads
 - Dashboard (production profile) runs on port 8081 so it no longer clashes with the frontend
+- Single `.env` file in the repository root (from `.env.example`) replaces `backend/.env` and `frontend/.env`
+- Production frontend and dashboard take their public URLs from `CHAT_URL` and `BACKEND_URL` at build time
+- Readme documents Docker Compose commands for a local run and for a production run on a single server
+- MongoDB port is only published on `127.0.0.1`
 
 ### Deprecated
 
