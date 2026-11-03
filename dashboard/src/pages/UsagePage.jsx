@@ -24,6 +24,7 @@ import {
   formatTokens,
   formatCost
 } from "../components/UsageTables";
+import { WithInfo } from "../components/InfoButton";
 
 const limitFields = [
   {
@@ -40,6 +41,81 @@ const limitFields = [
 ];
 
 const defaultRateLimitWindow = 60;
+
+// shown by the info button next to each limit
+const limitHelp = {
+  max_conversations_per_participant: {
+    title: "Max conversations per participant",
+    what: "How many conversations one participant_id may start in this project. Not applied when the chat URL has no participant_id.",
+    example:
+      "1: a participant who reloads the survey page cannot start a second chat.",
+    combined:
+      "With a participant allowlist, only the listed IDs can chat, each at most once. The allowlist also makes the participant_id required, so this limit always applies."
+  },
+  max_turns: {
+    title: "Max turns per conversation",
+    what: "How many messages a participant may send in one conversation. The chat closes after the last allowed message has been answered.",
+    example: "10: after the 10th answered message the chat input closes.",
+    combined:
+      "With max conversations per participant 1, each participant gets at most 10 messages in total. With a token cap per conversation, whichever is reached first ends the chat."
+  },
+  max_tokens_per_conversation: {
+    title: "Token cap per conversation",
+    what: "Prompt and completion tokens one conversation may use. Each reply sends the whole chat history again, so usage grows with every turn.",
+    example:
+      "50000: a long chat ends once about 50,000 tokens are used, even if turns are left.",
+    combined:
+      "With max turns 20, it stops participants who paste long texts from making 20 turns expensive. Turns limit normal chats, the token cap limits unusual ones."
+  },
+  max_tokens_per_project: {
+    title: "Token cap per project",
+    what: "Total tokens all conversations of this project may use. Once reached, no new chats start and running chats end.",
+    example:
+      "5000000: the project stops at 5 million tokens. The usage table above shows how close you are and the estimated cost.",
+    combined:
+      "With a token cap per conversation of 50000, 5000000 covers at least 100 conversations that use their full cap. Set it to about participants × conversation cap, plus a margin."
+  },
+  rate_limit_messages: {
+    title: "Rate limit",
+    what: "How many conversation starts and messages are allowed within the rate limit window. Further attempts get a 'please wait' notice and the message returns to the input field.",
+    example:
+      "10 with a window of 60 seconds: at most 10 starts and messages per minute. A participant typing normally never hits this, a script sending messages does.",
+    combined:
+      "Counted per participant ID, each participant has their own limit. Counted per IP address, everyone behind the same IP shares it, so allow more for lab sessions on one network."
+  },
+  rate_limit_window_seconds: {
+    title: "Rate limit window",
+    what: "The time span the rate limit counts over, from 1 to 86400 seconds (one day). Only used when the rate limit is set. The window slides: a slot frees up as soon as the oldest counted message is older than the window.",
+    example:
+      "30 with a rate limit of 5: at most 5 starts and messages in any 30 seconds.",
+    combined:
+      "A rate limit of 100 with a window of 86400 is a daily quota of 100 starts and messages per participant, across all their conversations. It adds to max turns, which limits one conversation."
+  },
+  rate_limit_key: {
+    title: "Rate limit counted per",
+    what: "Participant ID counts per participant_id from the chat URL and falls back to the IP address when the URL has none. IP address always counts per IP.",
+    example:
+      "Participant ID for a Prolific study where every URL carries the participant's ID; IP address when the URL has no ID or anyone could invent one.",
+    combined:
+      "With a participant allowlist, Participant ID is the right choice because IDs cannot be invented. Behind a proxy or ingress, set TRUST_X_FORWARDED_FOR in the backend, or all participants share the proxy's IP."
+  },
+  participant_allowlist: {
+    title: "Participant allowlist",
+    what: "Participant IDs (e.g. Prolific IDs) allowed to start a conversation, one per line or comma-separated. Empty means everyone may join.",
+    example:
+      "Paste the Prolific IDs of your approved participants; a chat URL with any other ID, or without one, shows 'You are not registered for this study'.",
+    combined:
+      "With max conversations per participant 1, each listed participant chats exactly once. With allowed embedding origins, someone who copies the iframe to another site is blocked, and opening the link directly still needs a listed ID."
+  },
+  allowed_embed_origins: {
+    title: "Allowed embedding origins",
+    what: "Sites allowed to show the chat in an iframe, one origin per line. *. allows all subdomains. Empty means any site may embed it. Opening the chat link directly, e.g. the test chat, keeps working.",
+    example:
+      "https://*.qualtrics.com: the chat works inside your Qualtrics survey, but not when someone embeds it on their own site.",
+    combined:
+      "It stops other sites from using your chat and token budget, but not direct visits to the link. Add a participant allowlist and a rate limit for those."
+  }
+};
 
 const emptyLimitsForm = {
   max_conversations_per_participant: "",
@@ -302,94 +378,106 @@ function UsagePage() {
           }}
         >
           {limitFields.map(({ key, label }) => (
+            <WithInfo key={key} info={limitHelp[key]}>
+              <TextField
+                fullWidth
+                label={label}
+                type="number"
+                size="small"
+                inputProps={{ min: 1, step: 1 }}
+                value={limitsForm[key]}
+                placeholder="No limit"
+                InputLabelProps={{ shrink: true }}
+                error={invalidFields.includes(key)}
+                helperText={
+                  invalidFields.includes(key)
+                    ? "Must be a positive integer"
+                    : " "
+                }
+                onChange={e =>
+                  setLimitsForm({ ...limitsForm, [key]: e.target.value })
+                }
+              />
+            </WithInfo>
+          ))}
+          <WithInfo info={limitHelp.rate_limit_window_seconds}>
             <TextField
-              key={key}
-              label={label}
+              fullWidth
+              label="Rate limit window (seconds)"
               type="number"
               size="small"
-              inputProps={{ min: 1, step: 1 }}
-              value={limitsForm[key]}
-              placeholder="No limit"
+              inputProps={{ min: 1, max: 86400, step: 1 }}
+              value={limitsForm.rate_limit_window_seconds}
+              placeholder={String(defaultRateLimitWindow)}
               InputLabelProps={{ shrink: true }}
-              error={invalidFields.includes(key)}
+              error={invalidWindow}
               helperText={
-                invalidFields.includes(key) ? "Must be a positive integer" : " "
+                invalidWindow ? "Must be between 1 and 86400 seconds" : " "
               }
               onChange={e =>
-                setLimitsForm({ ...limitsForm, [key]: e.target.value })
+                setLimitsForm({
+                  ...limitsForm,
+                  rate_limit_window_seconds: e.target.value
+                })
               }
             />
-          ))}
+          </WithInfo>
+          <WithInfo info={limitHelp.rate_limit_key}>
+            <TextField
+              fullWidth
+              select
+              label="Rate limit counted per"
+              size="small"
+              value={limitsForm.rate_limit_key}
+              helperText=" "
+              onChange={e =>
+                setLimitsForm({ ...limitsForm, rate_limit_key: e.target.value })
+              }
+            >
+              <MenuItem value="participant">Participant ID</MenuItem>
+              <MenuItem value="ip">IP address</MenuItem>
+            </TextField>
+          </WithInfo>
+        </Box>
+
+        <WithInfo info={limitHelp.participant_allowlist} sx={{ mt: 1 }}>
           <TextField
-            label="Rate limit window (seconds)"
-            type="number"
+            label="Participant allowlist"
+            multiline
+            minRows={3}
+            fullWidth
             size="small"
-            inputProps={{ min: 1, max: 86400, step: 1 }}
-            value={limitsForm.rate_limit_window_seconds}
-            placeholder={String(defaultRateLimitWindow)}
+            placeholder="Everyone allowed"
             InputLabelProps={{ shrink: true }}
-            error={invalidWindow}
-            helperText={
-              invalidWindow ? "Must be between 1 and 86400 seconds" : " "
-            }
+            value={limitsForm.participant_allowlist}
             onChange={e =>
               setLimitsForm({
                 ...limitsForm,
-                rate_limit_window_seconds: e.target.value
+                participant_allowlist: e.target.value
               })
             }
           />
+        </WithInfo>
+
+        <WithInfo info={limitHelp.allowed_embed_origins} sx={{ mt: 2 }}>
           <TextField
-            select
-            label="Rate limit counted per"
+            label="Allowed embedding origins"
+            multiline
+            minRows={2}
+            fullWidth
             size="small"
-            value={limitsForm.rate_limit_key}
-            helperText=" "
+            placeholder="Any site may embed the chat"
+            helperText="One origin per line, e.g. https://*.qualtrics.com. Only these sites may show the chat in an iframe."
+            InputLabelProps={{ shrink: true }}
+            value={limitsForm.allowed_embed_origins}
             onChange={e =>
-              setLimitsForm({ ...limitsForm, rate_limit_key: e.target.value })
+              setLimitsForm({
+                ...limitsForm,
+                allowed_embed_origins: e.target.value
+              })
             }
-          >
-            <MenuItem value="participant">Participant ID</MenuItem>
-            <MenuItem value="ip">IP address</MenuItem>
-          </TextField>
-        </Box>
-
-        <TextField
-          label="Participant allowlist"
-          multiline
-          minRows={3}
-          fullWidth
-          size="small"
-          sx={{ mt: 1 }}
-          placeholder="Everyone allowed"
-          InputLabelProps={{ shrink: true }}
-          value={limitsForm.participant_allowlist}
-          onChange={e =>
-            setLimitsForm({
-              ...limitsForm,
-              participant_allowlist: e.target.value
-            })
-          }
-        />
-
-        <TextField
-          label="Allowed embedding origins"
-          multiline
-          minRows={2}
-          fullWidth
-          size="small"
-          sx={{ mt: 2 }}
-          placeholder="Any site may embed the chat"
-          helperText="One origin per line, e.g. https://*.qualtrics.com. Only these sites may show the chat in an iframe."
-          InputLabelProps={{ shrink: true }}
-          value={limitsForm.allowed_embed_origins}
-          onChange={e =>
-            setLimitsForm({
-              ...limitsForm,
-              allowed_embed_origins: e.target.value
-            })
-          }
-        />
+          />
+        </WithInfo>
 
         <Button
           variant="contained"
