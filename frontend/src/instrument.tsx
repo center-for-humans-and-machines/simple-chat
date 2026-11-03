@@ -8,7 +8,7 @@ import {
 } from "react-router-dom";
 
 // Only initialize Sentry if enabled and DSN is configured
-if (process.env.SENTRY_ENABLED && process.env.SENTRY_DSN) {
+if (process.env.SENTRY_ENABLED === "true" && process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     // Adds request headers and IP for users, for more info visit:
