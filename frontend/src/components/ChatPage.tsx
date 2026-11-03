@@ -1,4 +1,10 @@
-import React, { useState, ChangeEvent, FormEvent, useEffect } from "react";
+import React, {
+  useState,
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useRef
+} from "react";
 import ChatContainer from "./ChatContainer";
 import ChatInputForm from "./ChatInputForm";
 import { Box } from "@mui/material";
@@ -21,6 +27,9 @@ const ChatPage: React.FC = () => {
   const [isTyping, setIsTyping] = useState<boolean>(true);
   // set when a project limit ends the conversation; the input stays closed
   const [limitMessage, setLimitMessage] = useState<string>("");
+  // set when a message was rejected by the rate limit; cleared on the next send
+  const [notice, setNotice] = useState<string>("");
+  const lastSentText = useRef<string>("");
   const [imageFile, setImageFile] = useState(null);
 
   const [urlParams, setUrlParams] = useState<{ [key: string]: any }>({});
@@ -118,6 +127,22 @@ const ChatPage: React.FC = () => {
       setLimitMessage(data.message);
     });
 
+    socket.on("rate_limited", data => {
+      console.log("rate_limited event: ", data);
+      if (data.stage === "start") {
+        // the conversation was not created, so the page has to be reloaded
+        setLimitMessage(
+          `${data.message} Reload the page in ${data.retry_after} seconds.`
+        );
+        return;
+      }
+      // the message was not stored: take it back so it can be sent again
+      setMessages(prevMessages => prevMessages.slice(0, -1));
+      setNewMessage(lastSentText.current);
+      setNotice(`${data.message} (${data.retry_after} s)`);
+      setIsTyping(false);
+    });
+
     socket.on("project_info", data => {
       if (data.error) {
         console.error("Error:", data.error);
@@ -142,6 +167,8 @@ const ChatPage: React.FC = () => {
       role: "user",
       content: newMessage
     };
+    lastSentText.current = newMessage;
+    setNotice("");
 
     if (imageFile) {
       message = {
@@ -247,6 +274,7 @@ const ChatPage: React.FC = () => {
           }}
         >
           {limitMessage && <span>{limitMessage}</span>}
+          {notice && !limitMessage && !isTyping && <span>{notice}</span>}
           {isTyping && !limitMessage && (
             <>
               <span>{projectInfo?.loading_message}</span>

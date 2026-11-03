@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     openai_base_url: Optional[str] = Field(default=None, env="OPENAI_BASE_URL")
     together_ai_key: Optional[str] = Field(default=None, env="TOGETHER_AI_KEY")
     together_ai_url: Optional[str] = Field(default=None, env="TOGETHER_AI_URL")
+    # Use the first X-Forwarded-For address as the participant IP for per-IP
+    # rate limits. Only enable behind a proxy that sets this header.
+    trust_x_forwarded_for: bool = Field(default=False, env="TRUST_X_FORWARDED_FOR")
     sentry_enabled: bool = Field(
         default=False, env="SENTRY_ENABLED", description="Enable Sentry monitoring"
     )

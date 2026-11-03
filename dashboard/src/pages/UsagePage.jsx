@@ -12,7 +12,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Divider
+  Divider,
+  MenuItem
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -31,14 +32,23 @@ const limitFields = [
   },
   { key: "max_turns", label: "Max turns per conversation" },
   { key: "max_tokens_per_conversation", label: "Token cap per conversation" },
-  { key: "max_tokens_per_project", label: "Token cap per project" }
+  { key: "max_tokens_per_project", label: "Token cap per project" },
+  {
+    key: "rate_limit_messages",
+    label: "Rate limit (starts and messages per window)"
+  }
 ];
+
+const defaultRateLimitWindow = 60;
 
 const emptyLimitsForm = {
   max_conversations_per_participant: "",
   max_turns: "",
   max_tokens_per_conversation: "",
   max_tokens_per_project: "",
+  rate_limit_messages: "",
+  rate_limit_window_seconds: defaultRateLimitWindow,
+  rate_limit_key: "participant",
   participant_allowlist: ""
 };
 
@@ -46,6 +56,9 @@ const limitsToForm = limits => ({
   ...Object.fromEntries(
     limitFields.map(({ key }) => [key, limits?.[key] ?? ""])
   ),
+  rate_limit_window_seconds:
+    limits?.rate_limit_window_seconds ?? defaultRateLimitWindow,
+  rate_limit_key: limits?.rate_limit_key || "participant",
   participant_allowlist: (limits?.participant_allowlist || []).join("\n")
 });
 
@@ -56,6 +69,11 @@ const formToLimits = form => ({
       form[key] === "" ? null : parseInt(form[key], 10)
     ])
   ),
+  rate_limit_window_seconds:
+    form.rate_limit_window_seconds === ""
+      ? defaultRateLimitWindow
+      : parseInt(form.rate_limit_window_seconds, 10),
+  rate_limit_key: form.rate_limit_key,
   participant_allowlist: form.participant_allowlist
     .split(/[\n,]/)
     .map(item => item.trim())
@@ -116,6 +134,12 @@ function UsagePage() {
     .filter(({ key }) => limitsForm[key] !== "")
     .filter(({ key }) => !/^[1-9]\d*$/.test(String(limitsForm[key])))
     .map(({ key }) => key);
+  const invalidWindow =
+    limitsForm.rate_limit_window_seconds !== "" &&
+    !(
+      /^[1-9]\d*$/.test(String(limitsForm.rate_limit_window_seconds)) &&
+      limitsForm.rate_limit_window_seconds <= 86400
+    );
 
   const saveLimits = async () => {
     setSaving(true);
@@ -253,7 +277,10 @@ function UsagePage() {
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Leave a field empty for no limit. The allowlist takes one participant
-          ID per line; when it is empty every participant may join.
+          ID per line; when it is empty every participant may join. The rate
+          limit counts conversation starts and messages within the window, per
+          participant ID (or per IP address when the chat URL has no participant
+          ID) or per IP address.
         </Typography>
 
         <Box
@@ -282,6 +309,38 @@ function UsagePage() {
               }
             />
           ))}
+          <TextField
+            label="Rate limit window (seconds)"
+            type="number"
+            size="small"
+            inputProps={{ min: 1, max: 86400, step: 1 }}
+            value={limitsForm.rate_limit_window_seconds}
+            placeholder={String(defaultRateLimitWindow)}
+            InputLabelProps={{ shrink: true }}
+            error={invalidWindow}
+            helperText={
+              invalidWindow ? "Must be between 1 and 86400 seconds" : " "
+            }
+            onChange={e =>
+              setLimitsForm({
+                ...limitsForm,
+                rate_limit_window_seconds: e.target.value
+              })
+            }
+          />
+          <TextField
+            select
+            label="Rate limit counted per"
+            size="small"
+            value={limitsForm.rate_limit_key}
+            helperText=" "
+            onChange={e =>
+              setLimitsForm({ ...limitsForm, rate_limit_key: e.target.value })
+            }
+          >
+            <MenuItem value="participant">Participant ID</MenuItem>
+            <MenuItem value="ip">IP address</MenuItem>
+          </TextField>
         </Box>
 
         <TextField
@@ -305,7 +364,7 @@ function UsagePage() {
         <Button
           variant="contained"
           sx={{ mt: 2 }}
-          disabled={saving || invalidFields.length > 0}
+          disabled={saving || invalidFields.length > 0 || invalidWindow}
           onClick={saveLimits}
         >
           Save limits

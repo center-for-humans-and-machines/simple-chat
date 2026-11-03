@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default model per project, chosen when creating a project in the dashboard
 - Iframe embed code and test chat link on the dashboard project page
 - `GET /project/models` endpoint listing supported models
+- Optional per-project rate limit on conversation starts and messages, counted per participant ID or per IP address (`TRUST_X_FORWARDED_FOR` for deployments behind a proxy)
 
 ### Changed
 
