@@ -7,7 +7,7 @@ Langfuse provides LLM observability and tracing for Simple Chat. By default, Lan
 1. Create a free account at [cloud.langfuse.com](https://cloud.langfuse.com)
 2. Create a new project in Langfuse
 3. Copy your project's public and secret keys from Settings
-4. Add to your `.env` file:
+4. Add to your `.env` file in the repository root:
 
 ```bash
 LANGFUSE_ENABLED=true
