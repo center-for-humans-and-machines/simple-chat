@@ -12,11 +12,6 @@ import { Message } from "../types";
 import BlinkingDots from "./BlinkingDots";
 import { socket } from "../socket";
 
-const shouldShowChatInput = (): boolean => {
-  const searchParams = new URLSearchParams(window.location.search);
-  return searchParams.get("chat_input") !== "false";
-};
-
 // origin of the page embedding the chat; null when not embedded or unknown
 const getEmbedOrigin = (): string | null => {
   if (window.self === window.top) {
@@ -37,7 +32,6 @@ const ChatPage: React.FC = () => {
   const [sessionId, setSessionId] = useState("");
   const [participantId, setParticipantId] = useState("");
   const [messages, setMessages] = useState([]);
-  const [showChatInput] = useState(() => shouldShowChatInput());
 
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(true);
@@ -299,7 +293,7 @@ const ChatPage: React.FC = () => {
             </>
           )}
         </div>
-        {showChatInput && !limitMessage && (
+        {!limitMessage && (
           <ChatInputForm
             newMessage={newMessage}
             handleInputChange={handleInputChange}
