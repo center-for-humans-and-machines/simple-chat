@@ -87,8 +87,7 @@ async def check_conversation_limits(project: Project, conversation: Conversation
     limits = project.limits
 
     if limits.max_turns is not None:
-        turns = sum(1 for message in conversation.messages if message["role"] == "user")
-        if turns >= limits.max_turns:
+        if conversation.user_turns >= limits.max_turns:
             return "max_turns"
 
     if limits.max_tokens_per_conversation is not None:

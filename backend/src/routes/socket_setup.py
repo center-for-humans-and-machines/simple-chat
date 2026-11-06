@@ -327,6 +327,8 @@ async def text_message(sid, data):
         return
 
     the_conversation.messages.append(new_conversation_message)
+    if new_conversation_message["role"] == "user":
+        the_conversation.user_turns += 1
     await the_conversation.save()
 
     message = await create_message(
@@ -399,6 +401,7 @@ async def image_message(sid, data):
         type="image",
     )
     the_conversation.messages.append(new_conversation_message)
+    the_conversation.user_turns += 1
     await the_conversation.save()
 
     messages = the_conversation.messages

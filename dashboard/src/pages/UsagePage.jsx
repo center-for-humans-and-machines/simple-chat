@@ -54,7 +54,7 @@ const limitHelp = {
   },
   max_turns: {
     title: "Max turns per conversation",
-    what: "How many messages a participant may send in one conversation. The chat closes after the last allowed message has been answered.",
+    what: "How many messages a participant may send in one conversation. In multi-round studies, messages copied from earlier rounds do not count. The chat closes after the last allowed message has been answered.",
     example: "10: after the 10th answered message the chat input closes.",
     combined:
       "With max conversations per participant 1, each participant gets at most 10 messages in total. With a token cap per conversation, whichever is reached first ends the chat."
