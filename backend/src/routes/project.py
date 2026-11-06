@@ -8,7 +8,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel
 from src.models import get_settings
 from src.models.models import CustomSystemMessage, Project
-from src.utils.configs import models
+from src.utils.configs import available_models
 from src.utils.limits import frame_ancestors_policy
 from src.utils.logging import setup_logger
 
@@ -37,7 +37,7 @@ class CustomSystemMessageInput(BaseModel):
 @project_router.get("/models")
 async def available_models():
     return {
-        "models": models["openai"] + models["together_ai"],
+        "models": available_models,
         "default": settings.openai_default_model,
     }
 
@@ -80,7 +80,7 @@ async def send_message(data: ProjectRegisterInput):
             status_code=400, detail="there is already a project with this project_id"
         )
 
-    if data.model and data.model not in models["openai"] + models["together_ai"]:
+    if data.model and data.model not in available_models:
         raise HTTPException(status_code=400, detail=f"unknown model: {data.model}")
 
     new_project = Project(
