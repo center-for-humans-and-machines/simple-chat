@@ -70,6 +70,17 @@ class TokenUsage(Document):
         indexes = ["project_id", "conversation_id"]
 
 
+class TokenBudget(Document):
+    # "project:<project_id>" or "conversation:<conversation_id>"
+    key: str
+    # recorded usage plus the tokens reserved by model calls still in flight;
+    # only changed with atomic $inc so concurrent calls cannot pass the cap together
+    tokens: int = 0
+
+    class Settings:
+        indexes = [pymongo.IndexModel([("key", pymongo.ASCENDING)], unique=True)]
+
+
 class RateLimitEvent(Document):
     project_id: str
     key: str  # "participant:<id>" or "ip:<address>"
