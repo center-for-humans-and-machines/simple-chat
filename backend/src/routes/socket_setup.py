@@ -9,9 +9,10 @@ from src.models.models import Project
 from src.utils.db import create_image, create_message
 from src.utils.configs import models
 from src.utils.helpers import (create_system_message_based_on_prev_rounds,
-                               get_custom_system_message, get_openai_backend,
+                               get_custom_system_message,
                                get_or_create_participant, get_response,
-                               store_search_parameters, upload)
+                               project_openai_backend, store_search_parameters,
+                               upload)
 from src.utils.limits import (RATE_LIMITED_MESSAGE, check_conversation_limits,
                               check_rate_limit, check_start_limits,
                               limit_message)
@@ -35,8 +36,7 @@ async def emit_limit_reached(sid, reason, participant_id):
     )
 
 
-async def conversation_limit_reached(sid, the_conversation) -> bool:
-    project = await Project.find_one({"project_id": the_conversation.project_id})
+async def conversation_limit_reached(sid, project, the_conversation) -> bool:
     reason = await check_conversation_limits(project, the_conversation)
     if reason:
         await emit_limit_reached(sid, reason, the_conversation.participant_id)
@@ -257,19 +257,18 @@ async def initial_message_to_server(sid, data):
                     else:
                         # it means the LLM should generate the first message.
                         await generate_llm_response(
-                            the_conversation, data, sio_server, sid, model
+                            project[0], the_conversation, data, sio_server, sid, model
                         )
 
                 else:
                     # it means the LLM should generate the first message.
                     await generate_llm_response(
-                        the_conversation, data, sio_server, sid, model
+                        project[0], the_conversation, data, sio_server, sid, model
                     )
 
 
-async def generate_llm_response(the_conversation, data, sio_server, sid, model):
-    openai_backend = await get_openai_backend(the_conversation.project_id)
-    client = init_model_endpoint(model, openai_backend)
+async def generate_llm_response(project, the_conversation, data, sio_server, sid, model):
+    client = init_model_endpoint(model, project_openai_backend(project))
 
     response_message = await get_response(
         session_id=data["session_id"],
@@ -323,7 +322,7 @@ async def text_message(sid, data):
     if await rate_limited(sid, project, the_conversation.participant_id, "message"):
         return
 
-    if await conversation_limit_reached(sid, the_conversation):
+    if await conversation_limit_reached(sid, project, the_conversation):
         return
 
     the_conversation.messages.append(new_conversation_message)
@@ -338,8 +337,7 @@ async def text_message(sid, data):
     for message in the_conversation.messages:
         logger.info(message, title=f"session  {data['session_id']} all messages")
 
-    openai_backend = await get_openai_backend(the_conversation.project_id)
-    client = init_model_endpoint(the_conversation.model, openai_backend)
+    client = init_model_endpoint(the_conversation.model, project_openai_backend(project))
 
     response_message = await get_response(
         session_id=data["session_id"],
@@ -368,7 +366,7 @@ async def text_message(sid, data):
         await the_conversation.save()
 
     # close the chat right away when this was the last allowed turn
-    await conversation_limit_reached(sid, the_conversation)
+    await conversation_limit_reached(sid, project, the_conversation)
 
 
 @sio_server.event
@@ -380,7 +378,7 @@ async def image_message(sid, data):
     if await rate_limited(sid, project, the_conversation.participant_id, "message"):
         return
 
-    if await conversation_limit_reached(sid, the_conversation):
+    if await conversation_limit_reached(sid, project, the_conversation):
         return
 
     message = create_image(
@@ -409,9 +407,7 @@ async def image_message(sid, data):
     if len(messages) >= 20:
         raise HTTPException(status_code=400, detail="Too many messages in this session")
 
-    openai_backend = await get_openai_backend(the_conversation.project_id)
-
-    client = init_model_endpoint(the_conversation.model, openai_backend)
+    client = init_model_endpoint(the_conversation.model, project_openai_backend(project))
 
     response_message = await get_response(
         session_id=data["session_id"],
@@ -439,7 +435,7 @@ async def image_message(sid, data):
         await the_conversation.save()
 
     # close the chat right away when this was the last allowed turn
-    await conversation_limit_reached(sid, the_conversation)
+    await conversation_limit_reached(sid, project, the_conversation)
 
 
 @sio_server.event

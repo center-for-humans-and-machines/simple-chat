@@ -136,10 +136,14 @@ async def create_system_message_based_on_prev_rounds(
     return prev_converation[0].messages
 
 
+def project_openai_backend(project: Project) -> str:
+    return project.openai_backend or "azure"  # default mode
+
+
 async def get_openai_backend(project_id):
     projects = await Project.find_many({"project_id": project_id}).to_list()
 
     if len(projects) == 0:
         return "not found"
 
-    return projects[0].openai_backend or "azure"  # default mode
+    return project_openai_backend(projects[0])
