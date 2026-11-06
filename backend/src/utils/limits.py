@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from src.models.message import Conversations
-from src.models.models import Project, RateLimitEvent, TokenBudget, TokenUsage
+from src.models.models import Project, RateLimitWindow, TokenBudget, TokenUsage
 
 # Messages shown to participants. They deliberately do not say which limit was hit.
 NOT_ALLOWED_MESSAGE = "You are not registered for this study, so the chat is not available."
@@ -249,27 +250,58 @@ async def check_rate_limit(project: Project, participant_id, ip: Optional[str]) 
         return None
 
     now = datetime.utcnow()
-    window_start = now - timedelta(seconds=limits.rate_limit_window_seconds)
+    # Mongo stores datetimes with millisecond precision
+    now = now.replace(microsecond=now.microsecond // 1000 * 1000)
+    window = timedelta(seconds=limits.rate_limit_window_seconds)
+    window_start = now - window
 
-    # Insert first and count afterwards, so that concurrent requests all see
-    # each other. Ordering by time (and _id for ties) lets exactly the first
-    # rate_limit_messages events in the window through.
-    event = RateLimitEvent(project_id=project.project_id, key=key, created_at=now)
-    await event.insert()
-    events = (
-        await RateLimitEvent.find(
-            {"project_id": project.project_id, "key": key, "created_at": {"$gt": window_start}}
+    # One atomic update drops the events that left the window and appends this
+    # one only while there is a free slot, so concurrent requests and replicas
+    # cannot all take the same slot.
+    update = [
+        {
+            "$set": {
+                "events": {
+                    "$filter": {
+                        "input": {"$ifNull": ["$events", []]},
+                        "cond": {"$gt": ["$$this", window_start]},
+                    }
+                }
+            }
+        },
+        {"$set": {"admitted": {"$lt": [{"$size": "$events"}, limits.rate_limit_messages]}}},
+        {
+            "$set": {
+                "events": {
+                    "$cond": ["$admitted", {"$concatArrays": ["$events", [now]]}, "$events"]
+                },
+                "expires_at": {
+                    "$cond": [
+                        "$admitted",
+                        now + window,
+                        {"$ifNull": ["$expires_at", now + window]},
+                    ]
+                },
+            }
+        },
+    ]
+    query = {"project_id": project.project_id, "key": key}
+    collection = RateLimitWindow.get_motor_collection()
+    try:
+        result = await collection.find_one_and_update(
+            query, update, upsert=True, return_document=ReturnDocument.AFTER
         )
-        .sort("+created_at", "+_id")
-        .to_list()
-    )
-    position = next(i for i, e in enumerate(events) if e.id == event.id)
-    if position < limits.rate_limit_messages:
+    except DuplicateKeyError:
+        # a concurrent request created the window first; it exists now
+        result = await collection.find_one_and_update(
+            query, update, return_document=ReturnDocument.AFTER
+        )
+
+    if result["admitted"]:
         return None
 
-    # a rejected attempt does not use up a slot
-    await event.delete()
     # the oldest counted event leaving the window frees the next slot
-    oldest = events[position - limits.rate_limit_messages]
-    wait = oldest.created_at - window_start
+    events = sorted(result["events"])
+    oldest = events[len(events) - limits.rate_limit_messages]
+    wait = oldest - window_start
     return max(1, int(wait.total_seconds()) + 1)
