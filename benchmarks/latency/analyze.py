@@ -115,7 +115,10 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                     ax.plot(xs, p50, color=color, lw=1.5, ls="--", marker="o", ms=4,
                             mfc="white", zorder=2)
             ax.set_xticks(range(len(levels)), [str(lvl) for lvl in levels])
-            ax.set_ylim(bottom=0)
+            # Shared y-axis per row: fit the largest p95 in the row so no whisker is cut.
+            row_cols = [c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns]
+            row_max = max(data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1)
+            ax.set_ylim(0, row_max * 1.08)
             ax.grid(axis="y", color=GRID, lw=0.8)
             ax.set_axisbelow(True)
             for side in ("top", "right"):
