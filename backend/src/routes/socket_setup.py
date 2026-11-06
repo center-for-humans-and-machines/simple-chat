@@ -43,6 +43,23 @@ async def conversation_limit_reached(sid, the_conversation) -> bool:
     return reason is not None
 
 
+CONVERSATION_NOT_READY_MESSAGE = "The chat is still starting. Please send your message again."
+
+
+async def find_conversation(sid, session_id):
+    """Return the conversation of a message, or tell the client it was not delivered."""
+    the_conversation = await Conversations.find_one(
+        Conversations.conversation_id == session_id
+    )
+    if the_conversation is None:
+        # the client sent before conversation_ready, or the start was refused
+        logger.warning(f"Message for unknown conversation {session_id} was not delivered")
+        await sio_server.emit(
+            "message_not_delivered", {"message": CONVERSATION_NOT_READY_MESSAGE}, sid
+        )
+    return the_conversation
+
+
 async def rate_limited(sid, project, participant_id, stage) -> bool:
     session = await sio_server.get_session(sid)
     retry_after = await check_rate_limit(project, participant_id, session.get("ip"))
@@ -201,6 +218,8 @@ async def initial_message_to_server(sid, data):
         multi_rounds=current_round_number,
     )
     await new_conversation.insert()
+    # the client enables sending only now, so no message arrives before the conversation exists
+    await sio_server.emit("conversation_ready", {"session_id": data["session_id"]}, sid)
 
     logger.info(
         data,
@@ -316,9 +335,9 @@ async def text_message(sid, data):
         timestamp=str(datetime.now()),
         type="text",
     )
-    the_conversation = await Conversations.find_one(
-        Conversations.conversation_id == data["session_id"]
-    )
+    the_conversation = await find_conversation(sid, data["session_id"])
+    if the_conversation is None:
+        return
     project = await Project.find_one({"project_id": the_conversation.project_id})
     if await rate_limited(sid, project, the_conversation.participant_id, "message"):
         return
@@ -371,9 +390,9 @@ async def text_message(sid, data):
 
 @sio_server.event
 async def image_message(sid, data):
-    the_conversation = await Conversations.find_one(
-        Conversations.conversation_id == data["session_id"]
-    )
+    the_conversation = await find_conversation(sid, data["session_id"])
+    if the_conversation is None:
+        return
     project = await Project.find_one({"project_id": the_conversation.project_id})
     if await rate_limited(sid, project, the_conversation.participant_id, "message"):
         return
