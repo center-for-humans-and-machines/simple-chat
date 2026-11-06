@@ -71,7 +71,15 @@ async def check_start_limits(
     # use the allowlist to require an ID.
     if limits.max_conversations_per_participant is not None and participant_id != -1:
         count = await Conversations.find(
-            {"project_id": project.project_id, "participant_id": participant_id}
+            {
+                "project_id": project.project_id,
+                "participant_id": participant_id,
+                # page reloads open a new conversation; only count those the
+                # participant wrote in
+                "user_turns": {"$gt": 0},
+                # rounds 2, 3, ... continue the conversation of round 1
+                "multi_rounds": {"$not": {"$gt": 1}},
+            }
         ).count()
         if count >= limits.max_conversations_per_participant:
             return "max_conversations_per_participant"
