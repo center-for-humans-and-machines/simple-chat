@@ -6,6 +6,9 @@ models = {
     ],
 }
 
+# every model a project or chat URL may use
+available_models = [model for provider_models in models.values() for model in provider_models]
+
 # Estimated list prices in USD per 1M tokens, used for the dashboard cost estimate.
 # Update these when provider pricing changes; models missing here are shown without cost.
 model_prices = {
