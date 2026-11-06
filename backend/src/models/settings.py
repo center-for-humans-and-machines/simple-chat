@@ -18,6 +18,26 @@ class Settings(BaseSettings):
     azure_openai_base_url: str = Field(..., env="AZURE_OPENAI_BASE_URL")
     openai_api_key: str = Field(..., env="OPENAI_API_KEY")
     openai_base_url: str = Field(..., env="OPENAI_BASE_URL")
+    azure_openai_api_version: str = Field(
+        default="2024-02-01",
+        env="AZURE_OPENAI_API_VERSION",
+        description='Azure API version, or "v1" for the /openai/v1/ endpoint (needed for GPT-5 models)',
+    )
+    azure_openai_deployments: dict = Field(
+        default_factory=dict,
+        env="AZURE_OPENAI_DEPLOYMENTS",
+        description='JSON map from model name to Azure deployment name, e.g. {"gpt-5.1-2025-11-13": "my-deployment"}',
+    )
+    openai_reasoning_effort: Optional[str] = Field(
+        default=None,
+        env="OPENAI_REASONING_EFFORT",
+        description="reasoning_effort for reasoning models (e.g. none, low, medium, high); unset uses the model default",
+    )
+    together_ai_reasoning_effort: Optional[str] = Field(
+        default=None,
+        env="TOGETHER_AI_REASONING_EFFORT",
+        description='reasoning_effort for Together AI models; "none" turns thinking off for hybrid models',
+    )
     together_ai_key: str = Field(..., env="TOGETHER_AI_KEY")
     together_ai_url: str = Field(..., env="TOGETHER_AI_URL")
     sentry_enabled: bool = Field(

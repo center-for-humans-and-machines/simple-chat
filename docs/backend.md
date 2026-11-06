@@ -192,6 +192,12 @@ When creating a new conversation, the system automatically places the previous c
 
 **Note:** This option overrides `custom message`.
 
+## Streaming
+
+By default, assistant replies are streamed to the participant chunk by chunk. To receive each reply as a single message instead, add `&stream=false` to the URL. The setting is stored per conversation.
+
+After every assistant reply (streamed or not), the backend emits a `message_end` Socket.IO event with `{"session_id": ..., "status": "ok" | "error"}`. The bundled frontend ignores it; it is meant for clients that need to know when a reply is complete, such as the [latency benchmark](../benchmarks/latency).
+
 ## Restrict Email Domains
 
 To restrict user registration to specific email domains, search in the codebase for the string `@mydomain.com` and replace it with your desired domain, e.g., `example.com`. This change should be made in the following files:

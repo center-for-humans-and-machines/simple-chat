@@ -36,6 +36,8 @@ class Conversations(Document):
     multi_rounds: Optional[int] = (
         0  # if it is zero means it is not multi round, if it is 1, 2, ... means there are several rounds.
     )
+    # Stream the assistant reply chunk by chunk (default) or send it as one message.
+    stream: bool = True
 
 
 class SearchParameters(Document):
