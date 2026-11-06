@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Usage and limits dashboard routes require a login token and are limited to the admin and the project owner
+
 ### Removed
 
 - GitHub Actions workflows (deployment and super-linter)

@@ -29,6 +29,8 @@ To access the dashboard, navigate to the dashboard URL and sign in with:
 
 The login authenticates against the backend at `/dashboard/login/{email}/{project_id}`.
 
+The login returns a token signed with `DASHBOARD_PASSWORD_ADMIN`, valid for 7 days. The usage and limits routes (`/dashboard/usage/...` and `/dashboard/limits/...`) require it as `Authorization: Bearer <token>` and only allow the admin or the project owner. Changing `DASHBOARD_PASSWORD_ADMIN` signs everyone out.
+
 ## Project Management
 
 After logging in, you can view all projects associated with your email address. For each project, you can:

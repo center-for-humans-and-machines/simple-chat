@@ -25,6 +25,7 @@ import {
   formatCost
 } from "../components/UsageTables";
 import { WithInfo } from "../components/InfoButton";
+import { authHeaders } from "../authHeaders";
 
 const limitFields = [
   {
@@ -177,7 +178,8 @@ function UsagePage() {
     const getUsage = async () => {
       try {
         const response = await fetch(
-          `${backendURL}/dashboard/usage/${project_id}`
+          `${backendURL}/dashboard/usage/${project_id}`,
+          { headers: authHeaders() }
         );
 
         if (!response.ok) {
@@ -194,7 +196,8 @@ function UsagePage() {
     const getLimits = async () => {
       try {
         const response = await fetch(
-          `${backendURL}/dashboard/limits/${project_id}`
+          `${backendURL}/dashboard/limits/${project_id}`,
+          { headers: authHeaders() }
         );
 
         if (!response.ok) {
@@ -231,7 +234,8 @@ function UsagePage() {
         {
           method: "PUT",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            ...authHeaders()
           },
           body: JSON.stringify(formToLimits(limitsForm))
         }
