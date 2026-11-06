@@ -65,6 +65,10 @@ class TokenUsage(Document):
     source: str = "chat"  # "chat" (participant conversations) or "llm_api" (/llm/* routes)
     created_at: str
 
+    class Settings:
+        # project and conversation caps aggregate by these on every message
+        indexes = ["project_id", "conversation_id"]
+
 
 class RateLimitEvent(Document):
     project_id: str
