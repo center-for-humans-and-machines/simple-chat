@@ -1,5 +1,7 @@
 # Simple Chat Documentation
 
+This documentation covers the self-hosted version of Simple Chat. If you prefer not to deploy it yourself, see [Simple Chat as a Service](../readme.md#simple-chat-as-a-service) and its [documentation](https://simple-chat.chm.mpib-berlin.mpg.de/).
+
 Simple Chat consists of the following components:
 
 - Database ([MongoDB](https://www.mongodb.com))
