@@ -1,8 +1,11 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 from src.models.message import Conversations
-from src.models.models import Project, RateLimitEvent, TokenUsage
+from src.models.models import Project, RateLimitWindow, TokenBudget, TokenUsage
 
 # Messages shown to participants. They deliberately do not say which limit was hit.
 NOT_ALLOWED_MESSAGE = "You are not registered for this study, so the chat is not available."
@@ -28,6 +31,113 @@ async def used_tokens(query: dict) -> int:
 async def project_token_cap_reached(project: Project) -> bool:
     cap = project.limits.max_tokens_per_project
     return cap is not None and await used_tokens({"project_id": project.project_id}) >= cap
+
+
+# Longest reply a call may generate while a token cap is set. A call near the
+# cap gets a shorter limit, so it cannot generate past the cap.
+MAX_COMPLETION_TOKENS = 4096
+# How often to retry a reservation that lost a race with a concurrent call.
+RESERVE_ATTEMPTS = 3
+
+
+@dataclass
+class TokenReservation:
+    # (budget key, reserved tokens) for every cap the call counts against
+    holds: List[Tuple[str, int]] = field(default_factory=list)
+    # passed to the provider as max_tokens; None when no token cap is set
+    max_tokens: Optional[int] = None
+
+
+def _token_caps(project: Project, conversation_id: Optional[str]):
+    """(budget key, cap, usage query, limit name) for every token cap that applies."""
+    limits = project.limits
+    caps = []
+    if limits.max_tokens_per_project is not None:
+        caps.append(
+            (
+                f"project:{project.project_id}",
+                limits.max_tokens_per_project,
+                {"project_id": project.project_id},
+                "max_tokens_per_project",
+            )
+        )
+    if conversation_id is not None and limits.max_tokens_per_conversation is not None:
+        caps.append(
+            (
+                f"conversation:{conversation_id}",
+                limits.max_tokens_per_conversation,
+                {"conversation_id": conversation_id},
+                "max_tokens_per_conversation",
+            )
+        )
+    return caps
+
+
+async def _budget_tokens(key: str, usage_query: dict) -> int:
+    """Current tokens of a budget, creating it from the recorded usage on first use."""
+    budget = await TokenBudget.find_one({"key": key})
+    if budget is not None:
+        return budget.tokens
+    try:
+        await TokenBudget(key=key, tokens=await used_tokens(usage_query)).insert()
+    except DuplicateKeyError:
+        pass  # created by a concurrent call
+    return (await TokenBudget.find_one({"key": key})).tokens
+
+
+async def _add_tokens(key: str, amount: int, cap: Optional[int] = None) -> bool:
+    """Atomically add tokens to a budget; with a cap, only while the result stays within it."""
+    query = {"key": key}
+    if cap is not None:
+        query["tokens"] = {"$lte": cap - amount}
+    result = await TokenBudget.get_motor_collection().find_one_and_update(
+        query, {"$inc": {"tokens": amount}}
+    )
+    return result is not None
+
+
+async def reserve_tokens(
+    project: Project, prompt_tokens: int, conversation_id: Optional[str] = None
+) -> Tuple[Optional[TokenReservation], Optional[str]]:
+    """Reserve the prompt and a bounded reply against the project and conversation token caps.
+
+    Return the reservation, or the name of the cap that leaves no room for a reply.
+    The caller passes reservation.max_tokens to the provider and calls settle_tokens afterwards.
+    """
+    caps = _token_caps(project, conversation_id)
+    if not caps:
+        return TokenReservation(), None
+
+    for _ in range(RESERVE_ATTEMPTS):
+        max_tokens = MAX_COMPLETION_TOKENS
+        for key, cap, usage_query, reason in caps:
+            room = cap - await _budget_tokens(key, usage_query) - prompt_tokens
+            if room < 1:
+                return None, reason
+            max_tokens = min(max_tokens, room)
+
+        amount = prompt_tokens + max_tokens
+        holds = []
+        for key, cap, _, _ in caps:
+            if not await _add_tokens(key, amount, cap):
+                break
+            holds.append((key, amount))
+        else:
+            return TokenReservation(holds=holds, max_tokens=max_tokens), None
+
+        # a concurrent call took part of the room: undo and recompute
+        for key, held in holds:
+            await _add_tokens(key, -held)
+
+    return None, caps[0][3]
+
+
+async def settle_tokens(reservation: Optional[TokenReservation], used: int):
+    """Replace the reserved tokens with the tokens the call recorded as used."""
+    if reservation is None:
+        return
+    for key, held in reservation.holds:
+        await _add_tokens(key, used - held)
 
 
 def origin_allowed(origin: str, allowed_origins: List[str]) -> bool:
@@ -140,27 +250,58 @@ async def check_rate_limit(project: Project, participant_id, ip: Optional[str]) 
         return None
 
     now = datetime.utcnow()
-    window_start = now - timedelta(seconds=limits.rate_limit_window_seconds)
+    # Mongo stores datetimes with millisecond precision
+    now = now.replace(microsecond=now.microsecond // 1000 * 1000)
+    window = timedelta(seconds=limits.rate_limit_window_seconds)
+    window_start = now - window
 
-    # Insert first and count afterwards, so that concurrent requests all see
-    # each other. Ordering by time (and _id for ties) lets exactly the first
-    # rate_limit_messages events in the window through.
-    event = RateLimitEvent(project_id=project.project_id, key=key, created_at=now)
-    await event.insert()
-    events = (
-        await RateLimitEvent.find(
-            {"project_id": project.project_id, "key": key, "created_at": {"$gt": window_start}}
+    # One atomic update drops the events that left the window and appends this
+    # one only while there is a free slot, so concurrent requests and replicas
+    # cannot all take the same slot.
+    update = [
+        {
+            "$set": {
+                "events": {
+                    "$filter": {
+                        "input": {"$ifNull": ["$events", []]},
+                        "cond": {"$gt": ["$$this", window_start]},
+                    }
+                }
+            }
+        },
+        {"$set": {"admitted": {"$lt": [{"$size": "$events"}, limits.rate_limit_messages]}}},
+        {
+            "$set": {
+                "events": {
+                    "$cond": ["$admitted", {"$concatArrays": ["$events", [now]]}, "$events"]
+                },
+                "expires_at": {
+                    "$cond": [
+                        "$admitted",
+                        now + window,
+                        {"$ifNull": ["$expires_at", now + window]},
+                    ]
+                },
+            }
+        },
+    ]
+    query = {"project_id": project.project_id, "key": key}
+    collection = RateLimitWindow.get_motor_collection()
+    try:
+        result = await collection.find_one_and_update(
+            query, update, upsert=True, return_document=ReturnDocument.AFTER
         )
-        .sort("+created_at", "+_id")
-        .to_list()
-    )
-    position = next(i for i, e in enumerate(events) if e.id == event.id)
-    if position < limits.rate_limit_messages:
+    except DuplicateKeyError:
+        # a concurrent request created the window first; it exists now
+        result = await collection.find_one_and_update(
+            query, update, return_document=ReturnDocument.AFTER
+        )
+
+    if result["admitted"]:
         return None
 
-    # a rejected attempt does not use up a slot
-    await event.delete()
     # the oldest counted event leaving the window frees the next slot
-    oldest = events[position - limits.rate_limit_messages]
-    wait = oldest.created_at - window_start
+    events = sorted(result["events"])
+    oldest = events[len(events) - limits.rate_limit_messages]
+    wait = oldest - window_start
     return max(1, int(wait.total_seconds()) + 1)

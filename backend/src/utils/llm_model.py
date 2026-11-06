@@ -5,9 +5,11 @@ import tiktoken
 # Note: The openai-python library support for Azure OpenAI is in preview.
 from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAI
 from src.models.message import OpenAIMessage
+from src.models.models import Project
 from src.models.settings import get_settings
 from src.utils.configs import models
 from src.utils.db import create_message
+from src.utils.limits import limit_message, reserve_tokens, settle_tokens
 from src.utils.logging import setup_logger
 from src.utils.usage import record_usage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -137,6 +139,27 @@ async def call_model(
             images_volume_total,
         )
 
+    # reserve the tokens this call may use before it starts, so that neither a
+    # long reply nor concurrent calls can go past the project's token caps
+    reservation = None
+    used_tokens = 0
+    if project_id is not None:
+        project = await Project.find_one({"project_id": project_id})
+        if project is not None:
+            reservation, reason = await reserve_tokens(
+                project, request_token_count, conversation_id=session_id
+            )
+            if reason:
+                logger.info(f"Participant {participant_id} blocked by project limit: {reason}")
+                await sio_server.emit(
+                    "limit_reached", {"reason": reason, "message": limit_message(reason)}, sid
+                )
+                return "ExceptionError"  # the reply is not generated and not saved
+
+    completion_kwargs = {}
+    if reservation is not None and reservation.max_tokens is not None:
+        completion_kwargs["max_tokens"] = reservation.max_tokens
+
     try:
         response = await completion_with_backoff(
             client,
@@ -144,6 +167,7 @@ async def call_model(
             messages=messages,
             temperature=0.7,
             stream=True,
+            **completion_kwargs,
         )
 
         full_response = ""
@@ -214,6 +238,8 @@ async def call_model(
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
 
+        used_tokens = total_token_count
+
         if project_id is not None:
             # streamed responses carry no `usage` with the pinned openai client,
             # so these counts are tiktoken estimates
@@ -250,6 +276,10 @@ async def call_model(
         await sio_server.emit("message_to_client", response_data, sid)
 
         return "ExceptionError"  # to make sure the flow of the program is not disrupted. this record will not be saved.
+
+    finally:
+        # keep the budgets equal to the recorded usage
+        await settle_tokens(reservation, used_tokens)
 
 
 token_count_limit = 8000

@@ -89,6 +89,14 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  // the message was not stored: take it back so it can be sent again
+  const takeBackLastMessage = (notice: string) => {
+    setMessages(prevMessages => prevMessages.slice(0, -1));
+    setNewMessage(lastSentText.current);
+    setNotice(notice);
+    setIsTyping(false);
+  };
+
   useEffect(() => {
     socket.connect();
 
@@ -98,9 +106,14 @@ const ChatPage: React.FC = () => {
 
     socket.on("session_id", async data => {
       console.log("session_id event: ", data);
-      setIsTyping(false); // user can send message after getting the session id.
+      // sending stays disabled until the backend has created the conversation
       setSessionId(data.session_id);
       await sending_initial_message(data.session_id);
+    });
+
+    socket.on("conversation_ready", (data: { session_id: string }) => {
+      console.log("conversation_ready event: ", data);
+      setIsTyping(false); // user can send messages once the conversation exists.
     });
 
     socket.on("set_participant_id", data => {
@@ -153,11 +166,12 @@ const ChatPage: React.FC = () => {
         );
         return;
       }
-      // the message was not stored: take it back so it can be sent again
-      setMessages(prevMessages => prevMessages.slice(0, -1));
-      setNewMessage(lastSentText.current);
-      setNotice(`${data.message} (${data.retry_after} s)`);
-      setIsTyping(false);
+      takeBackLastMessage(`${data.message} (${data.retry_after} s)`);
+    });
+
+    socket.on("message_not_delivered", (data: { message: string }) => {
+      console.log("message_not_delivered event: ", data);
+      takeBackLastMessage(data.message);
     });
 
     socket.on("project_info", data => {
@@ -175,8 +189,8 @@ const ChatPage: React.FC = () => {
   };
 
   const handleSendClick = async () => {
-    // Check if newMessage length is greater than 0
-    if (newMessage.length === 0) {
+    // Check if newMessage length is greater than 0, and that sending is enabled
+    if (newMessage.length === 0 || isTyping) {
       return;
     }
 

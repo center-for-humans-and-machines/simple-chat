@@ -70,14 +70,32 @@ class TokenUsage(Document):
         indexes = ["project_id", "conversation_id"]
 
 
-class RateLimitEvent(Document):
+class TokenBudget(Document):
+    # "project:<project_id>" or "conversation:<conversation_id>"
+    key: str
+    # recorded usage plus the tokens reserved by model calls still in flight;
+    # only changed with atomic $inc so concurrent calls cannot pass the cap together
+    tokens: int = 0
+
+    class Settings:
+        indexes = [pymongo.IndexModel([("key", pymongo.ASCENDING)], unique=True)]
+
+
+class RateLimitWindow(Document):
     project_id: str
     key: str  # "participant:<id>" or "ip:<address>"
-    created_at: datetime
+    # times of the conversation starts and messages admitted in the current window;
+    # kept in one document so admission is a single atomic update
+    events: List[datetime] = Field(default_factory=list)
+    # whether the last update admitted its event
+    admitted: bool = False
+    # the window is no longer needed once its newest event has left it
+    expires_at: Optional[datetime] = None
 
     class Settings:
         indexes = [
-            [("project_id", pymongo.ASCENDING), ("key", pymongo.ASCENDING), ("created_at", pymongo.ASCENDING)],
-            # events are only needed for the length of a window
-            pymongo.IndexModel([("created_at", pymongo.ASCENDING)], expireAfterSeconds=24 * 60 * 60),
+            pymongo.IndexModel(
+                [("project_id", pymongo.ASCENDING), ("key", pymongo.ASCENDING)], unique=True
+            ),
+            pymongo.IndexModel([("expires_at", pymongo.ASCENDING)], expireAfterSeconds=0),
         ]
