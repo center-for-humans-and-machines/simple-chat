@@ -46,7 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows (deployment and super-linter)
 - Kubernetes manifests and Helm chart
 - Start, stop, build and destroy scripts in `script/`; use the Docker Compose commands in the readme
-- `chat_input=false` query parameter that hid the chat input
 
 ## [1.0.0] - 2025-11-03
 
