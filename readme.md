@@ -44,7 +44,7 @@ Below are diagrams illustrating the architecture and chat interface:
 - [Docker](https://docs.docker.com/get-docker/) with the [Docker Compose plugin](https://docs.docker.com/compose/install/) (`docker compose version` should print v2.20 or newer)
 - An [OpenAI API key](https://platform.openai.com/api-keys)
 
-All settings live in a single `.env` file in the repository root. Copy [`.env.example`](./.env.example) and fill in `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional and described in [`.env.example`](./.env.example) and [`settings.py`](./backend/src/models/settings.py).
+All settings live in a single `.env` file in the repository root. Copy [`env.example`](./env.example) and fill in `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional and described in [`env.example`](./env.example) and [`settings.py`](./backend/src/models/settings.py).
 
 ## Quick Start (local)
 
@@ -55,7 +55,7 @@ Run Simple Chat on your computer and hold a first test conversation.
    ```bash
    git clone https://github.com/center-for-humans-and-machines/simple-chat.git
    cd simple-chat
-   cp .env.example .env
+   cp env.example .env
    ```
 
 1. In `.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` and `DASHBOARD_PASSWORD_ADMIN`.

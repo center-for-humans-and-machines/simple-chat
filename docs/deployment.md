@@ -1,6 +1,6 @@
 # Deployment
 
-Simple Chat runs with [Docker Compose](../compose.yml). All settings are read from a single `.env` file in the repository root, created from [`.env.example`](../.env.example). The commands for a local run and for a production run on a single server are in the [readme](../readme.md#quick-start-local).
+Simple Chat runs with [Docker Compose](../compose.yml). All settings are read from a single `.env` file in the repository root, created from [`env.example`](../env.example). The commands for a local run and for a production run on a single server are in the [readme](../readme.md#quick-start-local).
 
 **First-time local installation tutorial:**
 
