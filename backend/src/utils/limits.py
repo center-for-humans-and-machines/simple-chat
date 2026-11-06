@@ -141,19 +141,26 @@ async def check_rate_limit(project: Project, participant_id, ip: Optional[str]) 
 
     now = datetime.utcnow()
     window_start = now - timedelta(seconds=limits.rate_limit_window_seconds)
+
+    # Insert first and count afterwards, so that concurrent requests all see
+    # each other. Ordering by time (and _id for ties) lets exactly the first
+    # rate_limit_messages events in the window through.
+    event = RateLimitEvent(project_id=project.project_id, key=key, created_at=now)
+    await event.insert()
     events = (
         await RateLimitEvent.find(
             {"project_id": project.project_id, "key": key, "created_at": {"$gt": window_start}}
         )
-        .sort("created_at")
+        .sort("+created_at", "+_id")
         .to_list()
     )
+    position = next(i for i, e in enumerate(events) if e.id == event.id)
+    if position < limits.rate_limit_messages:
+        return None
 
-    if len(events) >= limits.rate_limit_messages:
-        # the oldest counted event leaving the window frees the next slot
-        oldest = events[len(events) - limits.rate_limit_messages]
-        wait = oldest.created_at - window_start
-        return max(1, int(wait.total_seconds()) + 1)
-
-    await RateLimitEvent(project_id=project.project_id, key=key, created_at=now).insert()
-    return None
+    # a rejected attempt does not use up a slot
+    await event.delete()
+    # the oldest counted event leaving the window frees the next slot
+    oldest = events[position - limits.rate_limit_messages]
+    wait = oldest.created_at - window_start
+    return max(1, int(wait.total_seconds()) + 1)
