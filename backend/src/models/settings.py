@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     s3_bucket_name: Optional[str] = Field(default=None, env="S3_BUCKET_NAME")
     s3_region_name: Optional[str] = Field(default=None, env="S3_REGION_NAME")
     openai_default_model: str = Field(default="gpt-4o", env="OPENAI_DEFAULT_MODEL")
-    # Backend assigned to new projects: "openai" or "azure"
-    openai_backend: str = Field(default="openai", env="OPENAI_BACKEND")
+    # Backend assigned to new projects: "openai" or "azure". Defaults to
+    # "azure", the backend every project used before this setting existed.
+    openai_backend: str = Field(default="azure", env="OPENAI_BACKEND")
     azure_openai_api_key: Optional[str] = Field(default=None, env="AZURE_OPENAI_API_KEY")
     azure_openai_base_url: Optional[str] = Field(default=None, env="AZURE_OPENAI_BASE_URL")
     openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
