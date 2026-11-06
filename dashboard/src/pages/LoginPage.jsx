@@ -55,6 +55,7 @@ export default function LoginPage() {
       }
 
       window.localStorage.setItem("email", email);
+      window.localStorage.setItem("token", data.token);
       navigator("/");
       // You can save a token or user data in context/localStorage here
     } catch (error) {

@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Usage and limits dashboard routes require a login token and are limited to the admin and the project owner
+
 ### Removed
 
 - Kubernetes manifests, Helm chart and the `script/` wrappers for Docker Compose; the disabled GitHub Actions deployment workflow stays as a reference
