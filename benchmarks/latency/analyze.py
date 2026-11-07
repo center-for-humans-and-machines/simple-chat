@@ -1,10 +1,11 @@
-"""Summarise the latency benchmark: p50/p95 per condition (CSV) plus one figure.
+"""Summarise the latency benchmark: p50/p95 per condition (CSV) plus figures.
 
 Reads every CSV in data/raw/ (or the files given), drops warm-up requests and writes:
 
 - results/summary.csv   p50/p95 of each latency metric per condition, plus error rate
 - results/overhead.csv  Simple Chat minus direct-to-provider p50/p95 (where both exist)
-- results/latency.png / .pdf  TTFT and full completion vs concurrent sessions
+- results/latency.png / .pdf  backend TTFT and full completion vs concurrent sessions
+- results/latency-e2e.png / .pdf  first and last character on screen in the browser
 
 Usage:
     python analyze.py
@@ -14,8 +15,8 @@ Usage:
 # This command-line script reports generated paths on stdout.
 # ruff: noqa: T201
 
-# plot() lays out one figure step by step.
-# pylint: disable=too-many-locals
+# _grid() lays out one figure step by step and takes its drawing callbacks.
+# pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -81,21 +82,23 @@ def overhead(summary: pl.DataFrame) -> pl.DataFrame:
         return pl.DataFrame()
     joined = backend.join(direct, on=keys, suffix="_direct")
     return joined.select(
-        keys + [(pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}") for c in cols]
+        keys
+        + [
+            (pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}")
+            for c in cols
+        ]
     ).sort(keys)
 
 
-def plot(summary: pl.DataFrame, out_stem: Path) -> None:
-    matplotlib.use("Agg")
+# Line style per device in the end-to-end figure; color still encodes streaming.
+DEVICE_STYLES = {
+    "desktop-chrome": ("-", "o", "Desktop Chrome"),
+    "android-chrome": ("--", "s", "Android Chrome (emulated)"),
+    "iphone-safari": (":", "^", "iPhone Safari (emulated)"),
+}
 
-    data = summary.filter(pl.col("mode").is_in(["backend", "direct"]))
-    if data.is_empty():
-        print("no backend/direct rows to plot")
-        return
-    conditions = sorted(set(data["condition"].to_list()))
-    levels = sorted(set(data["concurrency"].to_list()))
-    rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
 
+def _style_rc() -> None:
     plt.rcParams.update(
         {
             "font.size": 9,
@@ -107,6 +110,30 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
             "axes.titlesize": 10,
         }
     )
+
+
+def _p50_with_p95(ax, xs, p50, p95, **style) -> None:
+    """Median line; the whisker reaches up to p95."""
+    ax.errorbar(
+        xs,
+        p50,
+        yerr=[[0] * len(p50), [b - a for a, b in zip(p50, p95, strict=True)]],
+        capsize=3,
+        elinewidth=1.2,
+        markeredgecolor="white",
+        markeredgewidth=1.2,
+        zorder=3,
+        **style,
+    )
+
+
+def _grid(data, rows, series, draw, handles, out_stem: Path) -> None:
+    """One column per condition, one row per metric, one line per series."""
+    matplotlib.use("Agg")
+    _style_rc()
+    conditions = sorted(set(data["condition"].to_list()))
+    levels = sorted(set(data["concurrency"].to_list()))
+    x_of = {lvl: i for i, lvl in enumerate(levels)}
     fig, axes = plt.subplots(
         len(rows),
         len(conditions),
@@ -115,58 +142,26 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
         sharey="row",
         squeeze=False,
     )
-    x_of = {lvl: i for i, lvl in enumerate(levels)}
-
     for col, cond in enumerate(conditions):
         for row, (metric, label) in enumerate(rows):
             ax = axes[row][col]
-            for (mode, stream), part in data.filter(pl.col("condition") == cond).group_by(
-                ["mode", "stream"], maintain_order=True
+            for key, part in data.filter(pl.col("condition") == cond).group_by(
+                series, maintain_order=True
             ):
                 part = part.sort("concurrency")
-                xs = [x_of[c] for c in part["concurrency"]]
-                p50, p95 = (
-                    part[f"{metric}_p50"].to_list(),
-                    part[f"{metric}_p95"].to_list(),
-                )
+                p50 = part[f"{metric}_p50"].to_list()
                 if all(v is None for v in p50):
                     continue
-                color = STREAM_COLORS[stream]
-                if mode == "backend":
-                    # p50 line; the whisker reaches up to p95.
-                    ax.errorbar(
-                        xs,
-                        p50,
-                        yerr=[
-                            [0] * len(p50),
-                            [b - a for a, b in zip(p50, p95, strict=True)],
-                        ],
-                        color=color,
-                        lw=2,
-                        marker="o",
-                        ms=6,
-                        capsize=3,
-                        elinewidth=1.2,
-                        markeredgecolor="white",
-                        markeredgewidth=1.5,
-                        zorder=3,
-                    )
-                else:
-                    ax.plot(
-                        xs,
-                        p50,
-                        color=color,
-                        lw=1.5,
-                        ls="--",
-                        marker="o",
-                        ms=4,
-                        mfc="white",
-                        zorder=2,
-                    )
+                xs = [x_of[c] for c in part["concurrency"]]
+                draw(ax, key, xs, p50, part[f"{metric}_p95"].to_list())
             ax.set_xticks(range(len(levels)), [str(lvl) for lvl in levels])
             # Shared y-axis per row: fit the largest p95 in the row so no whisker is cut.
-            row_cols = [c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns]
-            row_max = max(data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1)
+            row_cols = [
+                c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns
+            ]
+            row_max = max(
+                data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1
+            )
             ax.set_ylim(0, row_max * 1.08)
             ax.grid(axis="y", color=GRID, lw=0.8)
             ax.set_axisbelow(True)
@@ -178,6 +173,51 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                 ax.set_ylabel(label)
             if row == len(rows) - 1:
                 ax.set_xlabel("Concurrent sessions")
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.0),
+    )
+    fig.text(
+        0.5,
+        -0.01,
+        "Points: median (p50). Whiskers: up to p95.",
+        ha="center",
+        color=INK_MUTED,
+        fontsize=8,
+    )
+    fig.tight_layout(rect=(0, 0.01, 1, 0.92))
+    for ext in ("png", "pdf"):
+        fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot(summary: pl.DataFrame, out_stem: Path) -> None:
+    """Backend and direct-to-provider times (what the Simple Chat server sees)."""
+    data = summary.filter(pl.col("mode").is_in(["backend", "direct"]))
+    if data.is_empty():
+        print("no backend/direct rows to plot")
+        return
+
+    def draw(ax, key, xs, p50, p95):
+        mode, stream = key
+        color = STREAM_COLORS[stream]
+        if mode == "backend":
+            _p50_with_p95(ax, xs, p50, p95, color=color, lw=2, marker="o", ms=6)
+        else:
+            ax.plot(
+                xs,
+                p50,
+                color=color,
+                lw=1.5,
+                ls="--",
+                marker="o",
+                ms=4,
+                mfc="white",
+                zorder=2,
+            )
 
     handles = [
         Line2D(
@@ -207,30 +247,63 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
             label="Direct to provider (p50)",
         ),
     ]
-    fig.legend(
-        handles=handles,
-        loc="upper center",
-        ncol=3,
-        frameon=False,
-        bbox_to_anchor=(0.5, 1.0),
-    )
-    fig.text(
-        0.5,
-        -0.01,
-        "Points: median (p50). Whiskers: up to p95.",
-        ha="center",
-        color=INK_MUTED,
-        fontsize=8,
-    )
-    fig.tight_layout(rect=(0, 0.01, 1, 0.94))
-    for ext in ("png", "pdf"):
-        fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
+    _grid(data, rows, ["mode", "stream"], draw, handles, out_stem)
+
+
+def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
+    """On-screen times in the browser (what participants see)."""
+    data = summary.filter(pl.col("mode") == "e2e")
+    if data.is_empty() or "total_render_s_p50" not in data.columns:
+        print("no e2e rows to plot")
+        return
+    devices = [d for d in DEVICE_STYLES if d in set(data["device"].to_list())]
+    # Nudge devices apart on the x-axis so their whiskers do not overlap.
+    nudge = {d: (i - (len(devices) - 1) / 2) * 0.08 for i, d in enumerate(devices)}
+
+    def draw(ax, key, xs, p50, p95):
+        device, stream = key
+        ls, marker, _ = DEVICE_STYLES.get(device, ("-", "o", device))
+        xs = [x + nudge.get(device, 0) for x in xs]
+        _p50_with_p95(
+            ax,
+            xs,
+            p50,
+            p95,
+            color=STREAM_COLORS[stream],
+            lw=1.6,
+            ls=ls,
+            marker=marker,
+            ms=5,
+        )
+
+    handles = [
+        Line2D([], [], color=STREAM_COLORS[True], lw=2, label="Streaming"),
+        Line2D([], [], color=STREAM_COLORS[False], lw=2, label="Non-streaming"),
+    ] + [
+        Line2D(
+            [],
+            [],
+            color=INK_MUTED,
+            lw=1.6,
+            ls=DEVICE_STYLES[d][0],
+            marker=DEVICE_STYLES[d][1],
+            label=DEVICE_STYLES[d][2],
+        )
+        for d in devices
+    ]
+    rows = [
+        ("ttft_render_s", "First character on screen (s)"),
+        ("total_render_s", "Full reply on screen (s)"),
+    ]
+    _grid(data, rows, ["device", "stream"], draw, handles, out_stem)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)")
+    parser.add_argument(
+        "files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)"
+    )
     parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR)
     args = parser.parse_args()
 
@@ -251,6 +324,8 @@ def main() -> None:
 
     plot(summary, args.out_dir / "latency")
     print(f"figure -> {args.out_dir / 'latency.png'}")
+    plot_e2e(summary, args.out_dir / "latency-e2e")
+    print(f"figure -> {args.out_dir / 'latency-e2e.png'}")
 
 
 if __name__ == "__main__":

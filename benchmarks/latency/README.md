@@ -15,7 +15,7 @@ same conditions. No browser measurements are committed yet.
 | ------------------------------ | ----------------------------------------------- | ---------------------------------------------- |
 | `run_backend.py`               | Client → Simple Chat backend (Socket.IO) → LLM  | `ttft_s`, `total_s` under 1 / 5 / 20 sessions  |
 | `run_backend.py --mode direct` | Client → LLM provider API, no Simple Chat       | Same, as a baseline for Simple Chat's overhead |
-| `run_e2e.py`                   | Browser → frontend in an iframe → backend → LLM | Network and on-screen times per device/browser |
+| `run_e2e.py`                   | Browser → frontend in an iframe → backend → LLM | On-screen times under 1 / 5 / 20 sessions      |
 
 - `ttfe_s`: time to the first assistant event (OpenAI's first chunk carries only the role)
 - `ttft_s`: time to the first chunk with text (time to first token)
@@ -66,10 +66,11 @@ python run_backend.py --config conditions.toml
 # Direct-to-provider baseline (reads the same keys as the backend)
 python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
 
-# End to end in browsers (one session at a time)
-python run_e2e.py --config conditions.toml --device desktop-chrome android-chrome iphone-safari
+# End to end in browsers: desktop Chrome, emulated Android and iPhone,
+# 1/5/20 sessions open at once, 30 measured trials per block
+python run_e2e.py --config conditions.toml --trials 30
 
-# p50/p95 table, overhead table and figure
+# p50/p95 table, overhead table and figures
 python analyze.py
 ```
 
@@ -79,8 +80,10 @@ combines all of them into:
 - `results/summary.csv`: n, error rate, and p50/p95 of every metric per mode,
   condition, streaming, concurrency and device
 - `results/overhead.csv`: Simple Chat minus direct p50/p95, per condition
-- `results/latency.png` and `.pdf`: time to first token and full completion against
-  concurrent sessions
+- `results/latency.png` and `.pdf`: backend time to first token and full completion
+  against concurrent sessions
+- `results/latency-e2e.png` and `.pdf`: first and last character on screen in the
+  browser against concurrent sessions, per device
 
 The summary CSV and figure for the committed raw data are also versioned here.
 `overhead.csv` subtracts the two groups' p50 or p95 values. Those differences
@@ -98,5 +101,7 @@ Benchmark conversations are stored like any other conversation, with
   viewport, user agent and touch input of a Pixel 7 (Chromium) and an iPhone 14
   (WebKit), not the phone hardware or a mobile network. For real devices, run the
   same page on a phone or a device cloud and note it.
+- `run_e2e.py` opens every browser session on the client machine. At 20 sessions,
+  the client's CPU can delay rendering, so watch its load and report the machine.
 - `--reps 3` with 12 prompts gives 36 measured requests per block. Increase it
   if the p95 values are unstable between runs.

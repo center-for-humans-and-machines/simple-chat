@@ -13,8 +13,12 @@ Devices: desktop Chrome (installed Google Chrome), plus emulated mobile devices
 (Android Chrome via Chromium, iPhone Safari via WebKit). Emulation reproduces the
 viewport, user agent and touch input, not real phone hardware or networks.
 
+Like run_backend.py, it runs blocks of one condition x streaming mode x number of
+concurrent sessions (1, 5, 20 by default): that many browser sessions, each a
+simulated participant, chat at the same time.
+
 Usage:
-    python run_e2e.py --config conditions.toml --device desktop-chrome android-chrome iphone-safari
+    python run_e2e.py --config conditions.toml --trials 30
 """
 
 # CLI output, deterministic shuffling, and recording individual trial failures
@@ -33,6 +37,7 @@ import asyncio
 import json
 import random
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -42,6 +47,7 @@ from playwright.async_api import async_playwright
 FIELDS = [
     "run_id",
     "mode",
+    "block",
     "condition",
     "provider",
     "model",
@@ -51,6 +57,7 @@ FIELDS = [
     "browser",
     "rep",
     "prompt_id",
+    "worker",
     "warmup",
     "started_at",
     "setup_s",
@@ -213,6 +220,112 @@ async def one_trial(
         await context.close()
 
 
+@dataclass
+class Job:
+    rep: int
+    prompt: dict
+    warmup: bool
+
+
+# --------------------------------------------------------------------------------------
+# Blocks: one condition x stream mode x concurrency level, on one device
+# --------------------------------------------------------------------------------------
+
+
+async def run_block(
+    args,
+    config,
+    browser,
+    device,
+    descriptor,
+    cond,
+    stream,
+    concurrency,
+    prompts,
+    writer,
+    run_id,
+    block,
+):
+    """Run one block with `concurrency` browser sessions open at the same time.
+
+    Each worker is one simulated participant: it opens the chat in a fresh browser
+    context, sends one prompt and waits until the reply has been typed out on screen,
+    then starts the next trial. As in run_backend.py, every worker begins with one
+    warm-up trial (flagged, excluded from the analysis), then the workers share the
+    measured trials in a shuffled order.
+    """
+    jobs: asyncio.Queue[Job] = asyncio.Queue()
+    for i in range(concurrency):
+        jobs.put_nowait(Job(rep=-1, prompt=prompts[i % len(prompts)], warmup=True))
+    measured = [
+        Job(rep, p, False) for rep, p in common.prompt_schedule(prompts, args.reps, args.trials)
+    ]
+    random.Random(f"{args.seed}-{device}-{block}").shuffle(measured)
+    for job in measured:
+        jobs.put_nowait(job)
+    done = 0
+    total_jobs = jobs.qsize()
+    engine = DEVICES[device][0]
+
+    async def worker(worker_id: int):
+        nonlocal done
+        while True:
+            try:
+                job = jobs.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            row = {
+                "run_id": run_id,
+                "mode": "e2e",
+                "block": block,
+                "condition": cond.name,
+                "provider": cond.provider,
+                "model": cond.model,
+                "stream": stream,
+                "concurrency": concurrency,
+                "device": device,
+                "browser": f"{engine} {browser.version}",
+                "rep": job.rep,
+                "prompt_id": job.prompt["id"],
+                "worker": worker_id,
+                "warmup": job.warmup,
+                "started_at": common.utc_now(),
+                "target": config.frontend_url,
+                "client_host": common.client_host(),
+            }
+            participant_id = (
+                f"{run_id}-{device}-b{block}-w{worker_id}-{job.prompt['id']}-r{job.rep}"
+            )
+            try:
+                result = await one_trial(
+                    browser,
+                    descriptor,
+                    config,
+                    cond,
+                    job.prompt["content"],
+                    stream,
+                    participant_id,
+                    args.timeout,
+                    args.render_idle,
+                )
+            # Keep going; failures are part of the data.
+            # pylint: disable-next=broad-exception-caught
+            except Exception as e:
+                result = {
+                    "status": "error",
+                    "error": f"{type(e).__name__}: {e}"[:300],
+                }
+            writer.write({**row, **result})
+            done += 1
+            if result["status"] != "ok" or args.verbose:
+                print(
+                    f"    [{done}/{total_jobs}] {job.prompt['id']}: "
+                    f"{result['status']} {result.get('error', '')}"
+                )
+
+    await asyncio.gather(*(worker(i) for i in range(concurrency)))
+
+
 async def main_async(args) -> None:
     config = common.load_config(args.config)
     conditions = common.select_conditions(config, args.conditions)
@@ -224,7 +337,13 @@ async def main_async(args) -> None:
     run_id = common.new_run_id("e2e")
     out = Path(args.out) if args.out else common.RAW_DIR / f"{run_id}.csv"
     writer = common.RowWriter(out, FIELDS)
-    print(f"run {run_id} -> {out}")
+    blocks = [(c, s, n) for c in conditions for s in streams for n in args.concurrency]
+    per_block = len(common.prompt_schedule(prompts, args.reps, args.trials))
+    n_trials = len(args.device) * sum(n + per_block for _, _, n in blocks)
+    print(
+        f"run {run_id}: {len(args.device)} devices x {len(blocks)} blocks, "
+        f"{n_trials} trials -> {out}"
+    )
 
     async with async_playwright() as pw:
         try:
@@ -237,58 +356,31 @@ async def main_async(args) -> None:
                 descriptor = pw.devices[descriptor_name] if descriptor_name else None
                 print(f"  device {device} ({engine} {browser.version})")
 
-                trials = [
-                    (c, s, rep, p)
-                    for c in conditions
-                    for s in streams
-                    for rep, p in common.prompt_schedule(prompts, args.reps, args.trials)
-                ]
-                random.Random(f"{args.seed}-{device}").shuffle(trials)
-                # One warm-up trial per device (page caches, TLS, backend), not analysed.
-                trials.insert(0, (trials[0][0], trials[0][1], -1, trials[0][3]))
-
-                for i, (cond, stream, rep, prompt) in enumerate(trials):
-                    row = {
-                        "run_id": run_id,
-                        "mode": "e2e",
-                        "condition": cond.name,
-                        "provider": cond.provider,
-                        "model": cond.model,
-                        "stream": stream,
-                        "concurrency": 1,
-                        "device": device,
-                        "browser": f"{engine} {browser.version}",
-                        "rep": rep,
-                        "prompt_id": prompt["id"],
-                        "warmup": rep < 0,
-                        "started_at": common.utc_now(),
-                        "target": config.frontend_url,
-                        "client_host": common.client_host(),
-                    }
-                    try:
-                        result = await one_trial(
-                            browser,
-                            descriptor,
-                            config,
-                            cond,
-                            prompt["content"],
-                            stream,
-                            f"{run_id}-{device}-{i}",
-                            args.timeout,
-                            args.render_idle,
-                        )
-                    # Keep going; failures are part of the data.
-                    # pylint: disable-next=broad-exception-caught
-                    except Exception as e:
-                        result = {
-                            "status": "error",
-                            "error": f"{type(e).__name__}: {e}"[:300],
-                        }
-                    writer.write({**row, **result})
+                # Shuffle the block order per device so time-of-day effects at the
+                # provider do not line up with one condition.
+                order = list(blocks)
+                random.Random(f"{args.seed}-{device}").shuffle(order)
+                for i, (cond, stream, concurrency) in enumerate(order):
                     print(
-                        f"    [{i + 1}/{len(trials)}] {cond.name} stream={stream} "
-                        f"{prompt['id']}: {result['status']} {result.get('error', '')}"
+                        f"  {device} block {i + 1}/{len(order)}: {cond.name} "
+                        f"stream={'on' if stream else 'off'} concurrency={concurrency}"
                     )
+                    await run_block(
+                        args,
+                        config,
+                        browser,
+                        device,
+                        descriptor,
+                        cond,
+                        stream,
+                        concurrency,
+                        prompts,
+                        writer,
+                        run_id,
+                        i,
+                    )
+                    if args.pause and i < len(order) - 1:
+                        await asyncio.sleep(args.pause)
                 await browser.close()
         finally:
             writer.close()
@@ -304,16 +396,25 @@ def main() -> None:
     parser.add_argument(
         "--device",
         nargs="+",
-        default=["desktop-chrome", "android-chrome"],
+        default=["desktop-chrome", "android-chrome", "iphone-safari"],
         choices=sorted(DEVICES),
     )
     parser.add_argument("--stream", nargs="+", default=["on", "off"], help="on and/or off")
-    parser.add_argument("--reps", type=int, default=2)
+    parser.add_argument(
+        "--concurrency",
+        nargs="+",
+        type=int,
+        default=[1, 5, 20],
+        help="browser sessions open at the same time",
+    )
+    parser.add_argument(
+        "--reps", type=int, default=2, help="repetitions of the prompt set per block"
+    )
     parser.add_argument(
         "--trials",
         type=int,
-        help="exact number of trials per condition and device, cycling through "
-        "the prompts (overrides --reps)",
+        help="exact number of measured trials per block, cycling through the "
+        "prompts (overrides --reps)",
     )
     parser.add_argument("--timeout", type=float, default=180, help="seconds per trial")
     parser.add_argument(
@@ -322,9 +423,11 @@ def main() -> None:
         default=1.0,
         help="seconds without on-screen change that count as finished",
     )
+    parser.add_argument("--pause", type=float, default=5, help="seconds between blocks")
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--headed", action="store_true", help="show the browser window")
     parser.add_argument("--out", help="output CSV (default: data/raw/<run_id>.csv)")
+    parser.add_argument("--verbose", action="store_true")
     asyncio.run(main_async(parser.parse_args()))
 
 
