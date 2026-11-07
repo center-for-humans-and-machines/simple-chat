@@ -63,6 +63,7 @@ async def get_response(
     client: AsyncOpenAI | AsyncAzureOpenAI,
     model: str,
     participant_id: str = None,
+    stream: bool = True,
 ) -> MessageDocument:
     omessages = [parse_to_openai(message) for message in messages]
     full_response = await call_model(
@@ -74,11 +75,19 @@ async def get_response(
         participant_id=participant_id,
         sio_server=sio_server,
         sid=sid,
+        stream=stream,
     )
 
     res_message = parse_from_openai(full_response)
 
     return res_message
+
+
+def parse_stream_flag(value) -> bool:
+    """Parse the optional `stream` query parameter; anything but an explicit "off" streams."""
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("false", "0", "no", "off")
 
 
 async def upload(img, message_id):
@@ -137,8 +146,6 @@ async def get_openai_backend(project_id):
 
     project = projects[0]
 
-    if "openai_backend" in project:
-        return project.openai_backend
-
-    else:
-        return "azure"  # default mode
+    # `"openai_backend" in project` is always False on a pydantic model, which
+    # silently forced every project onto Azure; read the field instead.
+    return project.openai_backend or "azure"  # default mode
