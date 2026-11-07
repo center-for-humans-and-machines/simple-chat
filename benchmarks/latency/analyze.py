@@ -8,6 +8,7 @@ Reads every CSV in data/raw/ (or the files given), drops warm-up requests and wr
 - results/latency.png / .pdf  backend TTFT and full completion vs concurrent sessions
 - results/latency-e2e.png / .pdf  first and last character on screen in the browser,
   next to the direct-to-provider baseline
+- results/latency-paper.pdf / .png  two-panel figure for the paper (journal style)
 
 Simple Chat runs are compared only with direct-to-provider runs from the same day
 (`date`), so that provider load is similar.
@@ -379,6 +380,200 @@ def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
     _grid(data, rows, ["mode", "device", "stream"], draw, handles, out_stem, note)
 
 
+# Okabe-Ito colors, the colorblind-safe set common in journals.
+PAPER_COLORS = {"provider": "#0072B2", "overhead": "#E69F00", "animation": "#009E73"}
+PAPER_GREY = "#999999"
+PAPER_MODELS = [
+    ("openai-gpt-5.1", "GPT-5.1, OpenAI"),
+    ("azure-gpt-5.1", "GPT-5.1, Azure"),
+    ("together-deepseek-v4.1-flash", "DeepSeek-V4.1-Flash, Together AI"),
+]
+PAPER_WIDTH_MM, PAPER_HEIGHT_MM = 165, 68  # 6.5 in text width of the manuscript
+
+
+def _paper_rows(df: pl.DataFrame) -> tuple[list[dict], str] | None:
+    """Per model and streaming mode: quartiles of the time to first visible text
+    (on screen and direct) and the median full reply, from the latest day that has
+    both an end-to-end run and a direct baseline."""
+    ok = df.filter(~pl.col("warmup") & (pl.col("status") == "ok"))
+    days = set(ok.filter(pl.col("mode") == "e2e")["date"].to_list()) & set(
+        ok.filter(pl.col("mode") == "direct")["date"].to_list()
+    )
+    if not days:
+        return None
+    day = max(days)
+    ok = ok.filter(pl.col("date") == day)
+
+    def quartiles(s: pl.Series) -> tuple[float, float, float]:
+        return (s.quantile(0.25, "linear"), s.median(), s.quantile(0.75, "linear"))
+
+    rows = []
+    for cond, label in PAPER_MODELS:
+        for stream in (True, False):
+            sel = (pl.col("condition") == cond) & (pl.col("stream") == stream)
+            e2e = ok.filter(sel & (pl.col("mode") == "e2e"))
+            direct = ok.filter(sel & (pl.col("mode") == "direct"))
+            if e2e.is_empty() or direct.is_empty():
+                continue
+            rows.append(
+                {
+                    "model": label,
+                    "stream": stream,
+                    # Without streaming the first token arrives with the full response.
+                    "direct": quartiles(direct["ttft_s"]),
+                    "screen": quartiles(e2e["ttft_render_s"]),
+                    "full": e2e["total_render_s"].median(),
+                }
+            )
+    return rows, day
+
+
+def plot_paper(df: pl.DataFrame, out_stem: Path) -> None:
+    """Two-panel figure for the paper, in journal style (Arial 5-7 pt, 0.5 pt lines).
+
+    a  time until the first text is visible: Simple Chat on screen vs direct API,
+       median and interquartile range, pooled over devices and concurrency
+    b  median time until the full reply is visible, split into provider API,
+       Simple Chat + browser, and display animation (differences of medians)
+    """
+    found = _paper_rows(df)
+    if not found or not found[0]:
+        print("no same-day e2e and direct rows for the paper figure")
+        return
+    rows, day = found
+    matplotlib.use("Agg")
+    style = {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.size": 7,
+        "legend.fontsize": 6.5,
+        "text.color": "black",
+        "axes.labelcolor": "black",
+        "axes.edgecolor": "black",
+        "xtick.color": "black",
+        "ytick.color": "black",
+        "axes.linewidth": 0.5,
+        "xtick.major.width": 0.5,
+        "xtick.major.size": 2,
+        "ytick.major.size": 0,
+        "xtick.direction": "out",
+        "pdf.fonttype": 42,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.spines.left": False,
+    }
+    with plt.rc_context(style):
+        mm = 1 / 25.4
+        fig, (ax_a, ax_b) = plt.subplots(
+            1,
+            2,
+            figsize=(PAPER_WIDTH_MM * mm, PAPER_HEIGHT_MM * mm),
+            sharey=True,
+            gridspec_kw={"width_ratios": [1, 1.35]},
+        )
+        pos, labels, groups = [], [], []
+        y = 0.0
+        for _, label in PAPER_MODELS:
+            groups.append((y - 0.55, label))
+            for stream in (True, False):
+                pos.append(y)
+                labels.append("Streaming" if stream else "Non-streaming")
+                y += 1.0
+            y += 0.7
+
+        for r, yy in zip(rows, pos):
+            for (lo, med, hi), color, dy, face in (
+                (r["direct"], PAPER_GREY, -0.16, "white"),
+                (r["screen"], PAPER_COLORS["provider"], 0.16, PAPER_COLORS["provider"]),
+            ):
+                ax_a.plot([lo, hi], [yy + dy] * 2, color=color, lw=0.8, solid_capstyle="butt")
+                ax_a.plot(med, yy + dy, marker="o", ms=3.2, mfc=face, mec=color, mew=0.7)
+            provider, first = r["direct"][1], r["screen"][1]
+            parts = [
+                (provider, PAPER_COLORS["provider"]),
+                (max(first - provider, 0.0), PAPER_COLORS["overhead"]),
+                (r["full"] - first, PAPER_COLORS["animation"]),
+            ]
+            left = 0.0
+            for width, color in parts:
+                ax_b.barh(yy, width, left=left, height=0.62, color=color, edgecolor="white", lw=0.4)
+                left += width
+            ax_b.text(left + 0.3, yy, f"{r['full']:.1f}", va="center", ha="left", fontsize=6)
+
+        a_max = max(r[k][2] for r in rows for k in ("direct", "screen"))
+        ax_a.set_xlim(0, a_max * 1.08)
+        ax_b.set_xlim(0, max(r["full"] for r in rows) * 1.18)
+        ax_a.set_xlabel("Time until first text is visible (s)")
+        ax_b.set_xlabel("Median time until full reply is visible (s)")
+        ax_a.set_yticks(pos, labels)
+        ax_a.set_ylim(y - 0.4, -1.1)
+        for gy, label in groups:
+            ax_a.text(
+                -0.47,
+                gy,
+                label,
+                transform=ax_a.get_yaxis_transform(),
+                ha="left",
+                va="center",
+                weight="bold",
+            )
+        legend = {"loc": "upper center", "bbox_to_anchor": (0.5, 1.14), "frameon": False}
+        ax_a.legend(
+            handles=[
+                Line2D(
+                    [],
+                    [],
+                    color=PAPER_GREY,
+                    lw=0.8,
+                    marker="o",
+                    ms=3.2,
+                    mfc="white",
+                    mew=0.7,
+                    label="Direct API",
+                ),
+                Line2D(
+                    [],
+                    [],
+                    color=PAPER_COLORS["provider"],
+                    lw=0.8,
+                    marker="o",
+                    ms=3.2,
+                    mew=0.7,
+                    label="Simple Chat, on screen",
+                ),
+            ],
+            ncol=2,
+            handlelength=1.6,
+            columnspacing=1.2,
+            **legend,
+        )
+        ax_b.legend(
+            handles=[
+                plt.Rectangle((0, 0), 1, 1, color=PAPER_COLORS["provider"], label="Provider API"),
+                plt.Rectangle(
+                    (0, 0), 1, 1, color=PAPER_COLORS["overhead"], label="Simple Chat + browser"
+                ),
+                plt.Rectangle(
+                    (0, 0), 1, 1, color=PAPER_COLORS["animation"], label="Display animation"
+                ),
+            ],
+            ncol=3,
+            handlelength=0.9,
+            handleheight=0.8,
+            handletextpad=0.4,
+            columnspacing=0.8,
+            **legend,
+        )
+        for ax, letter, x in ((ax_a, "a", -0.47), (ax_b, "b", -0.02)):
+            ax.tick_params(axis="y", length=0)
+            ax.text(x, 1.10, letter, transform=ax.transAxes, fontsize=8, weight="bold", va="bottom")
+        fig.subplots_adjust(left=0.21, right=0.98, bottom=0.18, top=0.86, wspace=0.12)
+        for ext in ("pdf", "png"):
+            fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=600)
+        plt.close(fig)
+    print(f"paper figure ({day}) -> {out_stem.with_suffix('.pdf')}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)")
@@ -409,6 +604,7 @@ def main() -> None:
     print(f"figure -> {args.out_dir / 'latency.png'}")
     plot_e2e(summary, args.out_dir / "latency-e2e")
     print(f"figure -> {args.out_dir / 'latency-e2e.png'}")
+    plot_paper(df, args.out_dir / "latency-paper")
 
 
 if __name__ == "__main__":
