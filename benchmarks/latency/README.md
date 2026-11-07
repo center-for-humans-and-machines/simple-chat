@@ -6,8 +6,11 @@ or 20 concurrent chat sessions. The raw data and results in this folder are the
 ones cited in the Simple Chat paper.
 
 The committed CSVs cover OpenAI GPT-5.1, Azure GPT-5.1, and Together AI DeepSeek
-V4.1 Flash in backend and direct modes. The example configuration names these
-same conditions. No browser measurements are committed yet.
+V4.1 Flash in backend and direct modes (6 November 2026), and the same three
+conditions end to end in desktop Chrome and an emulated iPhone Safari (7 November
+2026, `e2e-*.csv`). The end-to-end runs used the production Docker stack
+(`docker compose --profile prod`) on the benchmark machine. The example
+configuration names these same conditions.
 
 ## What Is Measured
 
