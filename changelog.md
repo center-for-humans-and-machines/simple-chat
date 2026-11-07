@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Round 2, 3, ... started without the previous round's history when the chat URL had no `experiment_id` (or no `participant_id`)
 - Frontend Sentry no longer initializes when `SENTRY_ENABLED=false`
 - Switching a project's OpenAI backend in the dashboard had no effect
 - Unsupported `model` values now show an error in the chat instead of failing silently

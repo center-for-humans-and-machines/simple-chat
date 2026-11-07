@@ -117,11 +117,13 @@ async def create_system_message_based_on_prev_rounds(
 ):
     looking_for_round = current_round - 1
 
+    # Conversations store both IDs as strings, while a missing ID in the chat
+    # URL arrives here as the integer -1; compare as strings so they match.
     prev_converation = (
         await Conversations.find(
             {
-                "experiment_id": experiment_id,
-                "participant_id": participant_id,
+                "experiment_id": str(experiment_id),
+                "participant_id": str(participant_id),
                 "multi_rounds": looking_for_round,
             }
         )
