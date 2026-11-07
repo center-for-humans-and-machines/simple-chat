@@ -3,9 +3,11 @@ import os
 import re
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel
 from src.models.message import Conversations
-from src.models.models import Project, ProjectLimits, TokenUsage
-from src.utils.auth import create_token, current_user, project_for_user
+from src.models.models import Project, ProjectLimits, Researcher, TokenUsage
+from src.utils.auth import (admin_user, authenticate, create_token,
+                            current_user, project_for_user)
 from src.utils.configs import model_prices
 from src.utils.logging import setup_logger
 from src.utils.usage import summarize_usage
@@ -18,23 +20,32 @@ EMBED_ORIGIN_PATTERN = re.compile(r"^https?://(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*(:
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-@dashboard_router.get("/login/{email}/{project_id}")
-async def login(email: str, project_id: str):
-    if (
-        project_id == os.environ["DASHBOARD_PASSWORD_ADMIN"]
-        and email == os.environ["DASHBOARD_USERNAME_ADMIN"]
-    ):
-        return {"status": True, "admin": True, "token": create_token(email, True)}
+class LoginInput(BaseModel):
+    email: str
+    password: str
 
-    project = await Project.find_many(
-        {"project_id": project_id, "created_by": email}
-    ).to_list()
-    if len(project) == 0:
-        raise HTTPException(
-            status_code=404, detail="project not found or email is wrong."
-        )
 
-    return {"status": True, "admin": False, "token": create_token(email, False)}
+@dashboard_router.post("/login")
+async def login(data: LoginInput):
+    user = await authenticate(data.email.strip(), data.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="email or password is wrong.")
+
+    return {
+        "status": True,
+        "admin": user["admin"],
+        "token": create_token(user["email"], user["admin"]),
+    }
+
+
+@dashboard_router.get("/researchers/{email}")
+async def researcher_exists(email: str, user: dict = Depends(admin_user)):
+    """Tell the create-project page whether it needs a password for this email."""
+    email = email.strip()
+    exists = email == os.environ["DASHBOARD_USERNAME_ADMIN"] or (
+        await Researcher.find_one({"email": email}) is not None
+    )
+    return {"email": email, "exists": exists}
 
 
 @dashboard_router.get("/projects/{email}")

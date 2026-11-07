@@ -17,7 +17,8 @@ export const AuthProvider = ({ children }) => {
     console.log("useEffect in AuthContext", emailInLocalStorage);
     console.log("useEffect in isAdmin", isAdmin);
 
-    if (emailInLocalStorage) {
+    // logins from before the dashboard used tokens have to sign in again
+    if (emailInLocalStorage && window.localStorage.getItem("token")) {
       if (emailInLocalStorage.includes("@")) {
         setAuthData({
           email: emailInLocalStorage,
