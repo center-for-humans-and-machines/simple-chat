@@ -89,7 +89,7 @@ export default function LoginPage() {
               margin="normal"
               required
               fullWidth
-              label="MPG Email Address"
+              label="Email Address"
               type="email"
               autoFocus
               value={email}
@@ -99,7 +99,7 @@ export default function LoginPage() {
               margin="normal"
               required
               fullWidth
-              label="Project ID"
+              label="Project ID (admin: password)"
               type="text"
               value={projectId}
               onChange={e => setProjectId(e.target.value)}

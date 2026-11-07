@@ -7,24 +7,84 @@ from src.models import get_settings
 from src.models.message import ConversationMessage, Conversations
 from src.models.models import Project
 from src.utils.db import create_image, create_message
+from src.utils.configs import models
 from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
                                store_search_parameters, upload)
+from src.utils.limits import (RATE_LIMITED_MESSAGE, check_conversation_limits,
+                              check_rate_limit, check_start_limits,
+                              limit_message)
 from src.utils.llm_model import init_model_endpoint
 from src.utils.logging import setup_logger
 
 settings = get_settings()
 logger = setup_logger(__name__)
 
-sio_server = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+sio_server = socketio.AsyncServer(
+    async_mode="asgi", cors_allowed_origins=settings.cors_origins()
+)
 
 sio_app = socketio.ASGIApp(socketio_server=sio_server, socketio_path="/")
+
+
+async def emit_limit_reached(sid, reason, participant_id):
+    logger.info(f"Participant {participant_id} blocked by project limit: {reason}")
+    await sio_server.emit(
+        "limit_reached", {"reason": reason, "message": limit_message(reason)}, sid
+    )
+
+
+async def conversation_limit_reached(sid, the_conversation) -> bool:
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    reason = await check_conversation_limits(project, the_conversation)
+    if reason:
+        await emit_limit_reached(sid, reason, the_conversation.participant_id)
+    return reason is not None
+
+
+CONVERSATION_NOT_READY_MESSAGE = "The chat is still starting. Please send your message again."
+
+
+async def find_conversation(sid, session_id):
+    """Return the conversation of a message, or tell the client it was not delivered."""
+    the_conversation = await Conversations.find_one(
+        Conversations.conversation_id == session_id
+    )
+    if the_conversation is None:
+        # the client sent before conversation_ready, or the start was refused
+        logger.warning(f"Message for unknown conversation {session_id} was not delivered")
+        await sio_server.emit(
+            "message_not_delivered", {"message": CONVERSATION_NOT_READY_MESSAGE}, sid
+        )
+    return the_conversation
+
+
+async def rate_limited(sid, project, participant_id, stage) -> bool:
+    session = await sio_server.get_session(sid)
+    retry_after = await check_rate_limit(project, participant_id, session.get("ip"))
+    if retry_after is not None:
+        logger.info(f"Participant {participant_id} rate limited for {retry_after}s")
+        await sio_server.emit(
+            "rate_limited",
+            {"stage": stage, "retry_after": retry_after, "message": RATE_LIMITED_MESSAGE},
+            sid,
+        )
+    return retry_after is not None
+
+
+def client_ip(environ):
+    forwarded_for = environ.get("HTTP_X_FORWARDED_FOR")
+    if settings.trust_x_forwarded_for and forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    client = environ["asgi.scope"].get("client")
+    return client[0] if client else None
 
 
 @sio_server.event
 async def connect(sid, environ, auth):
     logger.info(f"Client is connected with sid : {sid}")
+    await sio_server.save_session(sid, {"ip": client_ip(environ)})
     session_id = uuid.uuid4().hex
     await sio_server.emit("session_id", {"session_id": session_id}, sid)
 
@@ -104,16 +164,34 @@ async def initial_message_to_server(sid, data):
 
     await sio_server.emit("set_participant_id", {"participant_id": participant_id}, sid)
 
+    reason = await check_start_limits(
+        project[0], participant_id, data.get("embed_origin")
+    )
+    if reason:
+        await emit_limit_reached(sid, reason, participant_id)
+        return
+
+    if await rate_limited(sid, project[0], participant_id, "start"):
+        return
+
     if "model" in data["data"]:
         model = data["data"]["model"]
     else:
-        model = settings.openai_default_model
+        model = project[0].model or settings.openai_default_model
 
     if model == "deepseekr1":
         model = "together_ai-deepseek-ai/DeepSeek-R1"  # because of the / in the name of the model.
 
     elif model == "Llama-3.3-70B-Instruct-Turbo":
         model = "together_ai-meta-llama/Llama-3.3-70B-Instruct-Turbo"  # because of the / in the name of the model.
+
+    if model not in models["openai"] + models["together_ai"]:
+        await sio_server.emit(
+            "pid_not_found",
+            {"message": f"model {model} is not supported."},
+            sid,
+        )
+        return
 
     current_round_number = 0
     if "round" in data["data"]:
@@ -140,6 +218,8 @@ async def initial_message_to_server(sid, data):
         multi_rounds=current_round_number,
     )
     await new_conversation.insert()
+    # the client enables sending only now, so no message arrives before the conversation exists
+    await sio_server.emit("conversation_ready", {"session_id": data["session_id"]}, sid)
 
     logger.info(
         data,
@@ -217,6 +297,7 @@ async def generate_llm_response(the_conversation, data, sio_server, sid, model):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -254,9 +335,16 @@ async def text_message(sid, data):
         timestamp=str(datetime.now()),
         type="text",
     )
-    the_conversation = await Conversations.find_one(
-        Conversations.conversation_id == data["session_id"]
-    )
+    the_conversation = await find_conversation(sid, data["session_id"])
+    if the_conversation is None:
+        return
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    if await rate_limited(sid, project, the_conversation.participant_id, "message"):
+        return
+
+    if await conversation_limit_reached(sid, the_conversation):
+        return
+
     the_conversation.messages.append(new_conversation_message)
     await the_conversation.save()
 
@@ -277,6 +365,7 @@ async def text_message(sid, data):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -295,9 +384,22 @@ async def text_message(sid, data):
         # here we just save the response.
         await the_conversation.save()
 
+    # close the chat right away when this was the last allowed turn
+    await conversation_limit_reached(sid, the_conversation)
+
 
 @sio_server.event
 async def image_message(sid, data):
+    the_conversation = await find_conversation(sid, data["session_id"])
+    if the_conversation is None:
+        return
+    project = await Project.find_one({"project_id": the_conversation.project_id})
+    if await rate_limited(sid, project, the_conversation.participant_id, "message"):
+        return
+
+    if await conversation_limit_reached(sid, the_conversation):
+        return
+
     message = create_image(
         content="",
     )
@@ -314,9 +416,6 @@ async def image_message(sid, data):
         role="user",
         timestamp=str(datetime.now()),
         type="image",
-    )
-    the_conversation = await Conversations.find_one(
-        Conversations.conversation_id == data["session_id"]
     )
     the_conversation.messages.append(new_conversation_message)
     await the_conversation.save()
@@ -337,6 +436,7 @@ async def image_message(sid, data):
         client=client,
         model=the_conversation.model,
         participant_id=the_conversation.participant_id,
+        project_id=the_conversation.project_id,
         sio_server=sio_server,
         sid=sid,
     )
@@ -353,6 +453,9 @@ async def image_message(sid, data):
         # the message is sent to user by chunks
         # here we just save the response.
         await the_conversation.save()
+
+    # close the chat right away when this was the last allowed turn
+    await conversation_limit_reached(sid, the_conversation)
 
 
 @sio_server.event
