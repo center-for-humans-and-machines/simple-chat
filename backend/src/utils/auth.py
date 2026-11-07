@@ -9,13 +9,47 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 from typing import Optional
 
-from fastapi import Header, HTTPException
-from src.models.models import Project
+from fastapi import Depends, Header, HTTPException
+from src.models.models import Project, Researcher
 
 TOKEN_LIFETIME_SECONDS = 7 * 24 * 60 * 60
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_ITERATIONS = 600_000
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PASSWORD_ITERATIONS)
+    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest.hex()}"
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        _, iterations, salt, expected = password_hash.split("$")
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(iterations))
+    except ValueError:
+        return False
+    return hmac.compare_digest(digest.hex(), expected)
+
+
+def is_admin_login(email: str, password: str) -> bool:
+    return hmac.compare_digest(
+        email.encode(), os.environ["DASHBOARD_USERNAME_ADMIN"].encode()
+    ) and hmac.compare_digest(password.encode(), os.environ["DASHBOARD_PASSWORD_ADMIN"].encode())
+
+
+async def authenticate(email: str, password: str) -> Optional[dict]:
+    """Return the user for a dashboard login, or None."""
+    if is_admin_login(email, password):
+        return {"email": email, "admin": True}
+    researcher = await Researcher.find_one({"email": email})
+    if researcher and verify_password(password, researcher.password_hash):
+        return {"email": email, "admin": False}
+    return None
 
 
 def _secret() -> bytes:
@@ -52,6 +86,12 @@ def current_user(authorization: Optional[str] = Header(default=None)) -> dict:
     user = read_token(token) if scheme.lower() == "bearer" else None
     if user is None:
         raise HTTPException(status_code=401, detail="login required")
+    return user
+
+
+def admin_user(user: dict = Depends(current_user)) -> dict:
+    if not user.get("admin"):
+        raise HTTPException(status_code=403, detail="admin login required")
     return user
 
 

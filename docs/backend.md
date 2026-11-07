@@ -40,21 +40,25 @@ The documentation below includes sample requests to the backend with [`curl`](ht
 
 Every conversation should be assigned to a project. Project must be registered in advance.
 
-The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, call this endpoint:
+The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, call this endpoint with an admin token from `POST /dashboard/login`:
 
 ```shell
 curl --request POST \
   --url https://YOUR_SIMPLE_CHAT_BACKEND_URL/project/register \
   --header 'content-type: application/json' \
+  --header 'authorization: Bearer ADMIN_TOKEN' \
   --data '{
   "project_id": "MY_PROJECT_ID",
   "requested_by": "MYEMAIL",
   "system_message": "You are a helpful assistant.",
-  "model": "gpt-4o"
+  "model": "gpt-4o",
+  "researcher_password": "PASSWORD_FOR_A_NEW_RESEARCHER"
 }'
 ```
 
-In the example above, `YOUR_SIMPLE_CHAT_BACKEND_URL` is a placeholder for your actual Simple Chat backend URL.
+In the example above, `YOUR_SIMPLE_CHAT_BACKEND_URL` is a placeholder for your actual Simple Chat backend URL, and `ADMIN_TOKEN` is the `token` returned by `POST /dashboard/login` with the admin email and password.
+
+`researcher_password` is only needed when `requested_by` has no researcher account yet; it becomes the password this researcher logs in to the dashboard with (at least 8 characters).
 
 `model` is optional and sets the project's default model, used when the chat URL has no `model` query parameter. `GET /project/models` lists the supported values.
 
