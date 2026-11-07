@@ -168,8 +168,9 @@ async def continues_previous_round(
     previous = await Conversations.find_one(
         {
             "project_id": project.project_id,
-            "participant_id": participant_id,
-            "experiment_id": experiment_id,
+            # stored as strings; a missing ID arrives as the integer -1
+            "participant_id": str(participant_id),
+            "experiment_id": str(experiment_id),
             "multi_rounds": current_round - 1,
             "user_turns": {"$gt": 0},
         }
