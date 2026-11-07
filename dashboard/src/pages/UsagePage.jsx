@@ -46,7 +46,7 @@ const defaultRateLimitWindow = 60;
 const limitHelp = {
   max_conversations_per_participant: {
     title: "Max conversations per participant",
-    what: "How many conversations one participant_id may send messages in, in this project. Opening the chat without sending a message (e.g. a page reload) does not count, and rounds 2, 3, ... of a multi-round study continue round 1. Not applied when the chat URL has no participant_id.",
+    what: "How many conversations one participant_id may send messages in, in this project. Opening the chat without sending a message (e.g. a page reload) does not count, and rounds 2, 3, ... of a multi-round study continue round 1: they are not counted or blocked once the participant wrote in the previous round. Not applied when the chat URL has no participant_id.",
     example:
       "1: a participant who has chatted and then reloads the survey page cannot start a second chat.",
     combined:

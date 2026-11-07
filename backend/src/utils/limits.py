@@ -158,8 +158,31 @@ def frame_ancestors_policy(project: Project) -> Optional[str]:
     return "frame-ancestors " + " ".join(project.limits.allowed_embed_origins)
 
 
+async def continues_previous_round(
+    project: Project, participant_id, experiment_id, current_round: int
+) -> bool:
+    """True when this start is round 2, 3, ... of a conversation the participant
+    already has, i.e. the previous round exists and the participant wrote in it."""
+    if current_round <= 1:
+        return False
+    previous = await Conversations.find_one(
+        {
+            "project_id": project.project_id,
+            "participant_id": participant_id,
+            "experiment_id": experiment_id,
+            "multi_rounds": current_round - 1,
+            "user_turns": {"$gt": 0},
+        }
+    )
+    return previous is not None
+
+
 async def check_start_limits(
-    project: Project, participant_id, embed_origin: Optional[str] = None
+    project: Project,
+    participant_id,
+    embed_origin: Optional[str] = None,
+    experiment_id=None,
+    current_round: int = 0,
 ) -> Optional[str]:
     """Return the reason a participant may not start a conversation, or None."""
     limits = project.limits
@@ -179,7 +202,16 @@ async def check_start_limits(
 
     # Without a participant_id there is nobody to count conversations for;
     # use the allowlist to require an ID.
-    if limits.max_conversations_per_participant is not None and participant_id != -1:
+    # A later round continues the conversation of round 1, which is already
+    # counted. Requiring the previous round stops a made-up round number from
+    # skipping the cap.
+    if (
+        limits.max_conversations_per_participant is not None
+        and participant_id != -1
+        and not await continues_previous_round(
+            project, participant_id, experiment_id, current_round
+        )
+    ):
         count = await Conversations.find(
             {
                 "project_id": project.project_id,

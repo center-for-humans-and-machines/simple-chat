@@ -164,8 +164,13 @@ async def initial_message_to_server(sid, data):
 
     await sio_server.emit("set_participant_id", {"participant_id": participant_id}, sid)
 
+    current_round_number = int(data["data"].get("round", 0))
     reason = await check_start_limits(
-        project[0], participant_id, data.get("embed_origin")
+        project[0],
+        participant_id,
+        data.get("embed_origin"),
+        experiment_id=experiment_id_name,
+        current_round=current_round_number,
     )
     if reason:
         await emit_limit_reached(sid, reason, participant_id)
@@ -193,18 +198,15 @@ async def initial_message_to_server(sid, data):
         )
         return
 
-    current_round_number = 0
-    if "round" in data["data"]:
-        current_round_number = int(data["data"]["round"])
-        if current_round_number > 1:
-            prev_round_messages = await create_system_message_based_on_prev_rounds(
-                data["data"]["pid"],
-                experiment_id_name,
-                participant_id,
-                current_round_number,
-            )
-            if len(prev_round_messages) > 0:
-                initial_messages = prev_round_messages
+    if current_round_number > 1:
+        prev_round_messages = await create_system_message_based_on_prev_rounds(
+            data["data"]["pid"],
+            experiment_id_name,
+            participant_id,
+            current_round_number,
+        )
+        if len(prev_round_messages) > 0:
+            initial_messages = prev_round_messages
 
     new_conversation = Conversations(
         project_id=data["data"]["pid"],  # pid is project_id
