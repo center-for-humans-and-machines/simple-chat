@@ -173,7 +173,7 @@ async def initial_message_to_server(sid, data):
             if custom_system_message.assistant_first is True:
                 if hasattr(custom_system_message, "first_message"):
                     if len(custom_system_message.first_message) > 0:
-                        # first message should be send staticly.
+                        # first message should be send statically.
                         new_conversation_message = ConversationMessage(
                             content=custom_system_message.first_message,
                             role="assistant",

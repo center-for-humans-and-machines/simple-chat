@@ -23,7 +23,7 @@ The login authenticates against the backend at `/dashboard/login/{email}/{projec
 After logging in, you can view all projects associated with your email address. For each project, you can:
 
 - View project details (creation date, status, OpenAI backend)
-- Toggle project status between active and deactive
+- Toggle project status between active and inactive
 - Switch between OpenAI backends (OpenAI or Azure)
 - Edit the system message
 - Edit the loading message shown to participants
