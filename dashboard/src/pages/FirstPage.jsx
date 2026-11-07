@@ -98,7 +98,7 @@ function FirstPage() {
                   >
                     <ListItemText
                       primary={`${item.project_id} - ${
-                        item.active ? "active" : "deactive"
+                        item.active ? "active" : "inactive"
                       }`}
                     />
                   </ListItem>

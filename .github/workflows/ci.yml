@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install shfmt
+        run: sudo apt-get update && sudo apt-get install --yes shfmt
+      - name: Run pre-commit
+        run: uvx pre-commit@4.7.0 run --all-files --show-diff-on-failure
+
+  build:
+    name: Build
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build development and production images
+        run: |
+          docker compose --profile dev build --pull
+          docker compose --profile prod build --pull
+
+  smoke:
+    name: Smoke test
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: simple-chat-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create local test configuration
+        run: |
+          cp backend/env.example backend/.env
+          sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=ci-dummy-key/' backend/.env
+      - name: Start production stack
+        run: docker compose --profile prod up --build --wait --detach
+      - name: Check HTTP responses
+        run: |
+          curl --fail --show-error http://localhost:8000/health
+          curl --fail --show-error http://localhost:8080/
+          curl --fail --show-error http://localhost:8081/
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --profile prod logs --no-color
+      - name: Clean up containers
+        if: always()
+        run: docker compose --profile prod down --volumes --remove-orphans
+
+  test:
+    name: Tests
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: simple-chat-test-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create local test configuration
+        run: |
+          cp backend/env.example backend/.env
+          sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=ci-dummy-key/' backend/.env
+      - name: Build test images
+        run: docker compose --profile dev build --pull backend frontend-dev
+      - name: Test backend
+        run: docker compose --profile dev run --rm --no-deps backend poetry run pytest -q
+      - name: Test frontend
+        run: docker compose --profile dev run --rm --no-deps frontend-dev npm test -- --watch=false --runInBand
+      - name: Clean up containers
+        if: always()
+        run: docker compose --profile dev down --volumes --remove-orphans

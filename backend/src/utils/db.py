@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.models.message import Conversations, MessageDocument, SearchParameters
+from src.models.message import MessageDocument, SearchParameters
 
 
 async def get_param(session_id: str):

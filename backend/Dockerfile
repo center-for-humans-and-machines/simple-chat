@@ -1,15 +1,15 @@
 # Use the official Python image from the dockerhub
-FROM python:3.10-slim-buster
+FROM python:3.10-slim-bookworm
 
 # Set the working directory in the container to /app
 WORKDIR /app
 
 # Copy the pyproject.toml file to the working directory
-COPY pyproject.toml /app/
+COPY pyproject.toml poetry.lock /app/
 
 # Install the project dependencies
 RUN pip install --no-cache-dir --upgrade pip==23.3.1 && \
-    pip install --no-cache-dir poetry==1.7.0 && \
+    pip install --no-cache-dir poetry==2.1.2 && \
     poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-root
 

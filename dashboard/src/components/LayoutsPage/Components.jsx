@@ -6,8 +6,8 @@ function ContainersComponent() {
     <>
       <Container>
         <Typography variant="body1" sx={{ textAlign: "center" }}>
-          Followings are different size of containers. Various sizes can be used
-          in differnet pages or components, but using them in nested structure
+          The following are different sizes of containers. Various sizes can be used
+          in different pages or components, but using them in nested structure
           is not recommended.
         </Typography>
         <Typography variant="body1" sx={{ textAlign: "center" }}>
