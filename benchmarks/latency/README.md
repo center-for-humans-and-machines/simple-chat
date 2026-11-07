@@ -5,6 +5,10 @@ to the full reply, with streaming on and off, for several LLM providers and 1, 5
 or 20 concurrent chat sessions. The raw data and results in this folder are the
 ones cited in the Simple Chat paper.
 
+The committed CSVs cover OpenAI GPT-5.1, Azure GPT-5.1, and Together AI DeepSeek
+V4.1 Flash in backend and direct modes. The example configuration names these
+same conditions. No browser measurements are committed yet.
+
 ## What Is Measured
 
 | Script                         | Path measured                                   | Main metrics                                   |
@@ -44,7 +48,7 @@ cp conditions.example.toml conditions.toml   # then edit
 python setup_projects.py --config conditions.toml
 ```
 
-For GPT-5 models (such as `gpt-5.5-2026-04-23`), set `AZURE_OPENAI_API_VERSION=v1`
+For GPT-5 models (such as `gpt-5.1-2025-11-13`), set `AZURE_OPENAI_API_VERSION=v1`
 in the backend `.env`, and optionally `OPENAI_REASONING_EFFORT`. Reasoning effort
 strongly affects time to first token, so report the value used. Simple Chat and
 the direct baseline read the same variables, so both send the same request.
@@ -77,6 +81,10 @@ combines all of them into:
 - `results/overhead.csv`: Simple Chat minus direct p50/p95, per condition
 - `results/latency.png` and `.pdf`: time to first token and full completion against
   concurrent sessions
+
+The summary CSV and figure for the committed raw data are also versioned here.
+`overhead.csv` subtracts the two groups' p50 or p95 values. Those differences
+describe the measured groups; they are not per-request overhead measurements.
 
 Benchmark conversations are stored like any other conversation, with
 `experiment_id = latency-benchmark`, so they can be filtered out or deleted later.
