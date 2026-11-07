@@ -1,4 +1,0 @@
-apiVersion: v2
-name: web-service
-description: Deploy a web service
-version: 1.0.8
