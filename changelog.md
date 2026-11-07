@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Researchers log in to the dashboard with their e-mail and a password, set by the admin when creating their first project, instead of the project ID; accounts are stored in the new `Researcher` collection
 - `POST /project/register` requires an admin login
-- Usage and limits dashboard routes require a login token and are limited to the admin and the project owner
+- All project dashboard routes (projects, conversations, settings, usage and limits) require a login token and are limited to the admin and the project owner
 
 ### Removed
 

@@ -49,38 +49,41 @@ async def researcher_exists(email: str, user: dict = Depends(admin_user)):
 
 
 @dashboard_router.get("/projects/{email}")
-async def list_of_projects(email: str):
+async def list_of_projects(email: str, user: dict = Depends(current_user)):
+    if not user.get("admin") and email != user.get("email"):
+        raise HTTPException(status_code=403, detail="not allowed for this email")
     projects = await Project.find_many({"created_by": email}).to_list()
     return projects
 
 
 @dashboard_router.get("/project/{project_id}")
-async def list_of_projects(project_id: str):
-    projects = await Project.find_many({"project_id": project_id}).to_list()
-    return projects[0]
+async def get_project(project_id: str, user: dict = Depends(current_user)):
+    return await project_for_user(project_id, user)
 
 
 @dashboard_router.get("/conversations/{project_id}")
-async def list_of_conversations(project_id: str):
+async def list_of_conversations(project_id: str, user: dict = Depends(current_user)):
+    await project_for_user(project_id, user)
     conversations = await Conversations.find_many({"project_id": project_id}).to_list()
     return conversations
 
 
 @dashboard_router.get("/conversation/{conversation_id}")
-async def list_of_conversations(conversation_id: str):
-    conversations = await Conversations.find_many(
-        {"conversation_id": conversation_id}
-    ).to_list()
-    return conversations[0]
+async def get_conversation(conversation_id: str, user: dict = Depends(current_user)):
+    conversation = await Conversations.find_one({"conversation_id": conversation_id})
+    if not conversation:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    await project_for_user(conversation.project_id, user)
+    return conversation
 
 
 @dashboard_router.post("/update_system_message")
-async def list_of_conversations(project_id: str = Body(...), message: str = Body(...)):
-    project = await Project.find_one({"project_id": project_id})
-
-    if not project:
-        raise HTTPException(status_code=404, detail="project not found")
-
+async def update_system_message(
+    project_id: str = Body(...),
+    message: str = Body(...),
+    user: dict = Depends(current_user),
+):
+    project = await project_for_user(project_id, user)
     project.system_message = message
     await project.save()
 
@@ -88,11 +91,8 @@ async def list_of_conversations(project_id: str = Body(...), message: str = Body
 
 
 @dashboard_router.get("/toggle_status/{project_id}/{status}")
-async def list_of_conversations(project_id: str, status: str):
-    project = await Project.find_one({"project_id": project_id})
-
-    if not project:
-        raise HTTPException(status_code=404, detail="project not found")
+async def toggle_status(project_id: str, status: str, user: dict = Depends(current_user)):
+    project = await project_for_user(project_id, user)
 
     if status == "true":
         project.active = True
@@ -104,11 +104,10 @@ async def list_of_conversations(project_id: str, status: str):
 
 
 @dashboard_router.get("/toggle_openai_backend/{project_id}/{backend}")
-async def list_of_conversations(project_id: str, backend: str):
-    project = await Project.find_one({"project_id": project_id})
-
-    if not project:
-        raise HTTPException(status_code=404, detail="project not found")
+async def toggle_openai_backend(
+    project_id: str, backend: str, user: dict = Depends(current_user)
+):
+    project = await project_for_user(project_id, user)
 
     if backend not in ("azure", "openai"):
         raise HTTPException(status_code=501, detail="unvalid backend")
@@ -121,14 +120,11 @@ async def list_of_conversations(project_id: str, backend: str):
 
 @dashboard_router.post("/update_loading_message")
 async def update_loading_message(
-    project_id: str = Body(...), loading_message: str = Body(...)
+    project_id: str = Body(...),
+    loading_message: str = Body(...),
+    user: dict = Depends(current_user),
 ):
-    project = await Project.find_one({"project_id": project_id})
-
-    # logger.info(f"Found project: {project}")
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await project_for_user(project_id, user)
 
     project.loading_message = loading_message
     await project.save()
