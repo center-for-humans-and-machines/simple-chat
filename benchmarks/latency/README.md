@@ -6,8 +6,12 @@ or 20 concurrent chat sessions. The raw data and results in this folder are the
 ones cited in the Simple Chat paper.
 
 The committed CSVs cover OpenAI GPT-5.1, Azure GPT-5.1, and Together AI DeepSeek
-V4.1 Flash in backend and direct modes. The example configuration names these
-same conditions. No browser measurements are committed yet.
+V4.1 Flash in backend and direct modes (6 November 2026), and the same three
+conditions end to end in desktop Chrome and an emulated iPhone Safari (7 November
+2026, `e2e-*.csv`), with a direct-to-provider baseline from the same day. The
+end-to-end runs used the production Docker stack (`docker compose --profile prod`)
+on the benchmark machine. The example
+configuration names these same conditions.
 
 ## What Is Measured
 
@@ -15,7 +19,7 @@ same conditions. No browser measurements are committed yet.
 | ------------------------------ | ----------------------------------------------- | ---------------------------------------------- |
 | `run_backend.py`               | Client → Simple Chat backend (Socket.IO) → LLM  | `ttft_s`, `total_s` under 1 / 5 / 20 sessions  |
 | `run_backend.py --mode direct` | Client → LLM provider API, no Simple Chat       | Same, as a baseline for Simple Chat's overhead |
-| `run_e2e.py`                   | Browser → frontend in an iframe → backend → LLM | Network and on-screen times per device/browser |
+| `run_e2e.py`                   | Browser → frontend in an iframe → backend → LLM | On-screen times under 1 / 5 / 20 sessions      |
 
 - `ttfe_s`: time to the first assistant event (OpenAI's first chunk carries only the role)
 - `ttft_s`: time to the first chunk with text (time to first token)
@@ -66,10 +70,14 @@ python run_backend.py --config conditions.toml
 # Direct-to-provider baseline (reads the same keys as the backend)
 python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
 
-# End to end in browsers (one session at a time)
-python run_e2e.py --config conditions.toml --device desktop-chrome android-chrome iphone-safari
+# End to end in browsers: desktop Chrome and emulated iPhone Safari,
+# 1/5/20 sessions open at once, 30 measured trials per block
+python run_e2e.py --config conditions.toml --trials 30
 
-# p50/p95 table, overhead table and figure
+# Direct baseline for the end-to-end run, on the same day with the same 30 requests
+python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env --requests-per-block 30
+
+# p50/p95 table, overhead table and figures
 python analyze.py
 ```
 
@@ -78,11 +86,23 @@ combines all of them into:
 
 - `results/summary.csv`: n, error rate, and p50/p95 of every metric per mode,
   condition, streaming, concurrency and device
-- `results/overhead.csv`: Simple Chat minus direct p50/p95, per condition
-- `results/latency.png` and `.pdf`: time to first token and full completion against
-  concurrent sessions
+- `results/overhead.csv`: Simple Chat backend minus direct p50/p95, per condition
+- `results/overhead-e2e.csv`: first character on screen minus direct time to first
+  token, and full reply on screen minus direct full completion, per condition and
+  device
+- `results/latency.png` and `.pdf`: backend time to first token and full completion
+  against concurrent sessions
+- `results/latency-e2e.png` and `.pdf`: first and last character on screen in the
+  browser against concurrent sessions, per device, next to the direct baseline
+- `results/latency-paper.pdf` and `.png`: the figure in the paper. Panel a shows the
+  time until the first text is visible (median and interquartile range, Simple Chat
+  on screen vs direct API); panel b splits the median time until the full reply is
+  visible into provider API, Simple Chat + browser, and display animation
 
-The summary CSV and figure for the committed raw data are also versioned here.
+`analyze.py` compares Simple Chat runs only with direct runs from the same day
+(`date` column), so provider load is similar on both sides.
+
+The summary CSV and figures for the committed raw data are also versioned here.
 `overhead.csv` subtracts the two groups' p50 or p95 values. Those differences
 describe the measured groups; they are not per-request overhead measurements.
 
@@ -98,5 +118,7 @@ Benchmark conversations are stored like any other conversation, with
   viewport, user agent and touch input of a Pixel 7 (Chromium) and an iPhone 14
   (WebKit), not the phone hardware or a mobile network. For real devices, run the
   same page on a phone or a device cloud and note it.
+- `run_e2e.py` opens every browser session on the client machine. At 20 sessions,
+  the client's CPU can delay rendering, so watch its load and report the machine.
 - `--reps 3` with 12 prompts gives 36 measured requests per block. Increase it
   if the p95 values are unstable between runs.

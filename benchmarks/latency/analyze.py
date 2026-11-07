@@ -1,10 +1,17 @@
-"""Summarise the latency benchmark: p50/p95 per condition (CSV) plus one figure.
+"""Summarise the latency benchmark: p50/p95 per condition (CSV) plus figures.
 
 Reads every CSV in data/raw/ (or the files given), drops warm-up requests and writes:
 
 - results/summary.csv   p50/p95 of each latency metric per condition, plus error rate
-- results/overhead.csv  Simple Chat minus direct-to-provider p50/p95 (where both exist)
-- results/latency.png / .pdf  TTFT and full completion vs concurrent sessions
+- results/overhead.csv  Simple Chat backend minus direct-to-provider p50/p95
+- results/overhead-e2e.csv  on-screen times in the browser minus direct-to-provider p50/p95
+- results/latency.png / .pdf  backend TTFT and full completion vs concurrent sessions
+- results/latency-e2e.png / .pdf  first and last character on screen in the browser,
+  next to the direct-to-provider baseline
+- results/latency-paper.pdf / .png  two-panel figure for the paper (journal style)
+
+Simple Chat runs are compared only with direct-to-provider runs from the same day
+(`date`), so that provider load is similar.
 
 Usage:
     python analyze.py
@@ -14,8 +21,8 @@ Usage:
 # This command-line script reports generated paths on stdout.
 # ruff: noqa: T201
 
-# plot() lays out one figure step by step.
-# pylint: disable=too-many-locals
+# _grid() lays out one figure step by step and takes its drawing callbacks.
+# pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
 
 from __future__ import annotations
 
@@ -28,7 +35,7 @@ import polars as pl
 from common import RAW_DIR, RESULTS_DIR
 from matplotlib.lines import Line2D
 
-GROUP = ["mode", "condition", "provider", "model", "stream", "concurrency", "device"]
+GROUP = ["mode", "date", "condition", "provider", "model", "stream", "concurrency", "device"]
 METRICS = ["setup_s", "ttft_s", "total_s", "ttft_render_s", "total_render_s"]
 
 # Reference palette slots 1 and 2 (a validated adjacent pair); text stays in ink colors.
@@ -44,6 +51,7 @@ def load(paths: list[Path]) -> pl.DataFrame:
             df = df.with_columns(pl.lit(None).alias(col))
     return df.with_columns(
         pl.col("device").fill_null("none"),
+        pl.col("started_at").cast(pl.Utf8).str.slice(0, 10).alias("date"),
         pl.col("stream").cast(pl.Utf8).str.to_lowercase().eq("true"),
         pl.col("warmup").cast(pl.Utf8).str.to_lowercase().eq("true"),
         *[pl.col(m).cast(pl.Float64) for m in METRICS],
@@ -69,7 +77,7 @@ def summarise(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def overhead(summary: pl.DataFrame) -> pl.DataFrame:
-    keys = ["condition", "provider", "stream", "concurrency"]
+    keys = ["date", "condition", "provider", "stream", "concurrency"]
     cols = [
         c
         for c in ("ttft_s_p50", "ttft_s_p95", "total_s_p50", "total_s_p95")
@@ -85,17 +93,56 @@ def overhead(summary: pl.DataFrame) -> pl.DataFrame:
     ).sort(keys)
 
 
-def plot(summary: pl.DataFrame, out_stem: Path) -> None:
-    matplotlib.use("Agg")
+def overhead_e2e(summary: pl.DataFrame) -> pl.DataFrame:
+    """On-screen times minus the same-day direct-to-provider times.
 
-    data = summary.filter(pl.col("mode").is_in(["backend", "direct"]))
-    if data.is_empty():
-        print("no backend/direct rows to plot")
-        return
-    conditions = sorted(set(data["condition"].to_list()))
-    levels = sorted(set(data["concurrency"].to_list()))
-    rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
+    First character on screen is compared with the direct time to first token, and the
+    full reply on screen with the direct full completion.
+    """
+    keys = ["date", "condition", "provider", "stream", "concurrency"]
+    pairs = {
+        "first_char": ("ttft_render_s", "ttft_s"),
+        "full_reply": ("total_render_s", "total_s"),
+    }
+    if "total_render_s_p50" not in summary.columns:
+        return pl.DataFrame()
+    e2e = summary.filter(pl.col("mode") == "e2e")
+    direct = summary.filter(pl.col("mode") == "direct").select(
+        keys + [f"{d}_{q}" for _, d in pairs.values() for q in ("p50", "p95")]
+    )
+    if e2e.is_empty() or direct.is_empty():
+        return pl.DataFrame()
+    joined = e2e.join(direct, on=keys, suffix="_direct")
+    return joined.select(
+        keys
+        + ["device"]
+        + [
+            (pl.col(f"{screen}_{q}") - pl.col(f"{d}_{q}_direct"))
+            .round(3)
+            .alias(f"overhead_{n}_{q}")
+            for n, (screen, d) in pairs.items()
+            for q in ("p50", "p95")
+        ]
+    ).sort(keys + ["device"])
 
+
+def _same_day_direct(summary: pl.DataFrame, mode: str) -> pl.DataFrame:
+    """Rows of `mode` plus the direct-to-provider rows from the same days."""
+    rows = summary.filter(pl.col("mode") == mode)
+    days = rows["date"].unique().to_list()
+    direct = summary.filter((pl.col("mode") == "direct") & pl.col("date").is_in(days))
+    return pl.concat([rows, direct], how="diagonal_relaxed")
+
+
+# Line style per device in the end-to-end figure; color still encodes streaming.
+DEVICE_STYLES = {
+    "desktop-chrome": ("-", "o", "Desktop Chrome"),
+    "android-chrome": ("--", "s", "Android Chrome (emulated)"),
+    "iphone-safari": (":", "^", "iPhone Safari (emulated)"),
+}
+
+
+def _style_rc() -> None:
     plt.rcParams.update(
         {
             "font.size": 9,
@@ -107,6 +154,30 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
             "axes.titlesize": 10,
         }
     )
+
+
+def _p50_with_p95(ax, xs, p50, p95, **style) -> None:
+    """Median line; the whisker reaches up to p95."""
+    ax.errorbar(
+        xs,
+        p50,
+        yerr=[[0] * len(p50), [b - a for a, b in zip(p50, p95, strict=True)]],
+        capsize=3,
+        elinewidth=1.2,
+        markeredgecolor="white",
+        markeredgewidth=1.2,
+        zorder=3,
+        **style,
+    )
+
+
+def _grid(data, rows, series, draw, handles, out_stem: Path, note: str = "") -> None:
+    """One column per condition, one row per metric, one line per series."""
+    matplotlib.use("Agg")
+    _style_rc()
+    conditions = sorted(set(data["condition"].to_list()))
+    levels = sorted(set(data["concurrency"].to_list()))
+    x_of = {lvl: i for i, lvl in enumerate(levels)}
     fig, axes = plt.subplots(
         len(rows),
         len(conditions),
@@ -115,54 +186,18 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
         sharey="row",
         squeeze=False,
     )
-    x_of = {lvl: i for i, lvl in enumerate(levels)}
-
     for col, cond in enumerate(conditions):
         for row, (metric, label) in enumerate(rows):
             ax = axes[row][col]
-            for (mode, stream), part in data.filter(pl.col("condition") == cond).group_by(
-                ["mode", "stream"], maintain_order=True
+            for key, part in data.filter(pl.col("condition") == cond).group_by(
+                series, maintain_order=True
             ):
                 part = part.sort("concurrency")
-                xs = [x_of[c] for c in part["concurrency"]]
-                p50, p95 = (
-                    part[f"{metric}_p50"].to_list(),
-                    part[f"{metric}_p95"].to_list(),
-                )
+                p50 = part[f"{metric}_p50"].to_list()
                 if all(v is None for v in p50):
                     continue
-                color = STREAM_COLORS[stream]
-                if mode == "backend":
-                    # p50 line; the whisker reaches up to p95.
-                    ax.errorbar(
-                        xs,
-                        p50,
-                        yerr=[
-                            [0] * len(p50),
-                            [b - a for a, b in zip(p50, p95, strict=True)],
-                        ],
-                        color=color,
-                        lw=2,
-                        marker="o",
-                        ms=6,
-                        capsize=3,
-                        elinewidth=1.2,
-                        markeredgecolor="white",
-                        markeredgewidth=1.5,
-                        zorder=3,
-                    )
-                else:
-                    ax.plot(
-                        xs,
-                        p50,
-                        color=color,
-                        lw=1.5,
-                        ls="--",
-                        marker="o",
-                        ms=4,
-                        mfc="white",
-                        zorder=2,
-                    )
+                xs = [x_of[c] for c in part["concurrency"]]
+                draw(ax, key, xs, p50, part[f"{metric}_p95"].to_list())
             ax.set_xticks(range(len(levels)), [str(lvl) for lvl in levels])
             # Shared y-axis per row: fit the largest p95 in the row so no whisker is cut.
             row_cols = [c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns]
@@ -178,6 +213,51 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                 ax.set_ylabel(label)
             if row == len(rows) - 1:
                 ax.set_xlabel("Concurrent sessions")
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.0),
+    )
+    fig.text(
+        0.5,
+        -0.01,
+        "Points: median (p50). Whiskers: up to p95." + (f" {note}" if note else ""),
+        ha="center",
+        color=INK_MUTED,
+        fontsize=8,
+    )
+    fig.tight_layout(rect=(0, 0.01, 1, 0.92))
+    for ext in ("png", "pdf"):
+        fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot(summary: pl.DataFrame, out_stem: Path) -> None:
+    """Backend and direct-to-provider times (what the Simple Chat server sees)."""
+    data = _same_day_direct(summary, "backend")
+    if data.filter(pl.col("mode") == "backend").is_empty():
+        print("no backend rows to plot")
+        return
+
+    def draw(ax, key, xs, p50, p95):
+        mode, stream = key
+        color = STREAM_COLORS[stream]
+        if mode == "backend":
+            _p50_with_p95(ax, xs, p50, p95, color=color, lw=2, marker="o", ms=6)
+        else:
+            ax.plot(
+                xs,
+                p50,
+                color=color,
+                lw=1.5,
+                ls="--",
+                marker="o",
+                ms=4,
+                mfc="white",
+                zorder=2,
+            )
 
     handles = [
         Line2D(
@@ -207,25 +287,291 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
             label="Direct to provider (p50)",
         ),
     ]
-    fig.legend(
-        handles=handles,
-        loc="upper center",
-        ncol=3,
-        frameon=False,
-        bbox_to_anchor=(0.5, 1.0),
+    rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
+    _grid(data, rows, ["mode", "stream"], draw, handles, out_stem)
+
+
+def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
+    """On-screen times in the browser (what participants see)."""
+    if "total_render_s_p50" not in summary.columns:
+        print("no e2e rows to plot")
+        return
+    # The direct baseline has no screen: plot its time to first token and full
+    # completion in the first-character and full-reply rows.
+    data = _same_day_direct(summary, "e2e").with_columns(
+        *[
+            pl.when(pl.col("mode") == "direct")
+            .then(pl.col(f"{d}_{q}"))
+            .otherwise(pl.col(f"{screen}_{q}"))
+            .alias(f"{screen}_{q}")
+            for screen, d in (("ttft_render_s", "ttft_s"), ("total_render_s", "total_s"))
+            for q in ("p50", "p95")
+        ]
     )
-    fig.text(
-        0.5,
-        -0.01,
-        "Points: median (p50). Whiskers: up to p95.",
-        ha="center",
-        color=INK_MUTED,
-        fontsize=8,
+    if data.filter(pl.col("mode") == "e2e").is_empty():
+        print("no e2e rows to plot")
+        return
+    devices = [d for d in DEVICE_STYLES if d in set(data["device"].to_list())]
+    # Nudge devices apart on the x-axis so their whiskers do not overlap.
+    nudge = {d: (i - (len(devices) - 1) / 2) * 0.08 for i, d in enumerate(devices)}
+
+    def draw(ax, key, xs, p50, p95):
+        mode, device, stream = key
+        if mode == "direct":
+            ax.plot(
+                xs,
+                p50,
+                color=STREAM_COLORS[stream],
+                lw=1.5,
+                ls="--",
+                marker="o",
+                ms=4,
+                mfc="white",
+                zorder=2,
+            )
+            return
+        ls, marker, _ = DEVICE_STYLES.get(device, ("-", "o", device))
+        xs = [x + nudge.get(device, 0) for x in xs]
+        _p50_with_p95(
+            ax,
+            xs,
+            p50,
+            p95,
+            color=STREAM_COLORS[stream],
+            lw=1.6,
+            ls=ls,
+            marker=marker,
+            ms=5,
+        )
+
+    handles = [
+        Line2D([], [], color=STREAM_COLORS[True], lw=2, label="Streaming"),
+        Line2D([], [], color=STREAM_COLORS[False], lw=2, label="Non-streaming"),
+    ] + [
+        Line2D(
+            [],
+            [],
+            color=INK_MUTED,
+            lw=1.6,
+            ls=DEVICE_STYLES[d][0],
+            marker=DEVICE_STYLES[d][1],
+            label=DEVICE_STYLES[d][2],
+        )
+        for d in devices
+    ]
+    if not data.filter(pl.col("mode") == "direct").is_empty():
+        handles.append(
+            Line2D(
+                [],
+                [],
+                color=INK_MUTED,
+                lw=1.5,
+                ls="--",
+                marker="o",
+                mfc="white",
+                label="Direct to provider (p50)",
+            )
+        )
+    rows = [
+        ("ttft_render_s", "First character on screen (s)"),
+        ("total_render_s", "Full reply on screen (s)"),
+    ]
+    note = "Direct to provider: time to first token and full completion, no display."
+    _grid(data, rows, ["mode", "device", "stream"], draw, handles, out_stem, note)
+
+
+# Okabe-Ito colors, the colorblind-safe set common in journals.
+PAPER_COLORS = {"provider": "#0072B2", "overhead": "#E69F00", "animation": "#009E73"}
+PAPER_GREY = "#999999"
+PAPER_MODELS = [
+    ("openai-gpt-5.1", "GPT-5.1, OpenAI"),
+    ("azure-gpt-5.1", "GPT-5.1, Azure"),
+    ("together-deepseek-v4.1-flash", "DeepSeek-V4.1-Flash, Together AI"),
+]
+PAPER_WIDTH_MM, PAPER_HEIGHT_MM = 165, 68  # 6.5 in text width of the manuscript
+
+
+def _paper_rows(df: pl.DataFrame) -> tuple[list[dict], str] | None:
+    """Per model and streaming mode: quartiles of the time to first visible text
+    (on screen and direct) and the median full reply, from the latest day that has
+    both an end-to-end run and a direct baseline."""
+    ok = df.filter(~pl.col("warmup") & (pl.col("status") == "ok"))
+    days = set(ok.filter(pl.col("mode") == "e2e")["date"].to_list()) & set(
+        ok.filter(pl.col("mode") == "direct")["date"].to_list()
     )
-    fig.tight_layout(rect=(0, 0.01, 1, 0.94))
-    for ext in ("png", "pdf"):
-        fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    if not days:
+        return None
+    day = max(days)
+    ok = ok.filter(pl.col("date") == day)
+
+    def quartiles(s: pl.Series) -> tuple[float, float, float]:
+        return (s.quantile(0.25, "linear"), s.median(), s.quantile(0.75, "linear"))
+
+    rows = []
+    for cond, label in PAPER_MODELS:
+        for stream in (True, False):
+            sel = (pl.col("condition") == cond) & (pl.col("stream") == stream)
+            e2e = ok.filter(sel & (pl.col("mode") == "e2e"))
+            direct = ok.filter(sel & (pl.col("mode") == "direct"))
+            if e2e.is_empty() or direct.is_empty():
+                continue
+            rows.append(
+                {
+                    "model": label,
+                    "stream": stream,
+                    # Without streaming the first token arrives with the full response.
+                    "direct": quartiles(direct["ttft_s"]),
+                    "screen": quartiles(e2e["ttft_render_s"]),
+                    "full": e2e["total_render_s"].median(),
+                }
+            )
+    return rows, day
+
+
+def plot_paper(df: pl.DataFrame, out_stem: Path) -> None:
+    """Two-panel figure for the paper, in journal style (Arial 5-7 pt, 0.5 pt lines).
+
+    a  time until the first text is visible: Simple Chat on screen vs direct API,
+       median and interquartile range, pooled over devices and concurrency
+    b  median time until the full reply is visible, split into provider API,
+       Simple Chat + browser, and display animation (differences of medians)
+    """
+    found = _paper_rows(df)
+    if not found or not found[0]:
+        print("no same-day e2e and direct rows for the paper figure")
+        return
+    rows, day = found
+    matplotlib.use("Agg")
+    style = {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+        "font.size": 7,
+        "legend.fontsize": 6.5,
+        "text.color": "black",
+        "axes.labelcolor": "black",
+        "axes.edgecolor": "black",
+        "xtick.color": "black",
+        "ytick.color": "black",
+        "axes.linewidth": 0.5,
+        "xtick.major.width": 0.5,
+        "xtick.major.size": 2,
+        "ytick.major.size": 0,
+        "xtick.direction": "out",
+        "pdf.fonttype": 42,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.spines.left": False,
+    }
+    with plt.rc_context(style):
+        mm = 1 / 25.4
+        fig, (ax_a, ax_b) = plt.subplots(
+            1,
+            2,
+            figsize=(PAPER_WIDTH_MM * mm, PAPER_HEIGHT_MM * mm),
+            sharey=True,
+            gridspec_kw={"width_ratios": [1, 1.35]},
+        )
+        pos, labels, groups = [], [], []
+        y = 0.0
+        for _, label in PAPER_MODELS:
+            groups.append((y - 0.55, label))
+            for stream in (True, False):
+                pos.append(y)
+                labels.append("Streaming" if stream else "Non-streaming")
+                y += 1.0
+            y += 0.7
+
+        for r, yy in zip(rows, pos):
+            for (lo, med, hi), color, dy, face in (
+                (r["direct"], PAPER_GREY, -0.16, "white"),
+                (r["screen"], PAPER_COLORS["provider"], 0.16, PAPER_COLORS["provider"]),
+            ):
+                ax_a.plot([lo, hi], [yy + dy] * 2, color=color, lw=0.8, solid_capstyle="butt")
+                ax_a.plot(med, yy + dy, marker="o", ms=3.2, mfc=face, mec=color, mew=0.7)
+            provider, first = r["direct"][1], r["screen"][1]
+            parts = [
+                (provider, PAPER_COLORS["provider"]),
+                (max(first - provider, 0.0), PAPER_COLORS["overhead"]),
+                (r["full"] - first, PAPER_COLORS["animation"]),
+            ]
+            left = 0.0
+            for width, color in parts:
+                ax_b.barh(yy, width, left=left, height=0.62, color=color, edgecolor="white", lw=0.4)
+                left += width
+            ax_b.text(left + 0.3, yy, f"{r['full']:.1f}", va="center", ha="left", fontsize=6)
+
+        a_max = max(r[k][2] for r in rows for k in ("direct", "screen"))
+        ax_a.set_xlim(0, a_max * 1.08)
+        ax_b.set_xlim(0, max(r["full"] for r in rows) * 1.18)
+        ax_a.set_xlabel("Time until first text is visible (s)")
+        ax_b.set_xlabel("Median time until full reply is visible (s)")
+        ax_a.set_yticks(pos, labels)
+        ax_a.set_ylim(y - 0.4, -1.1)
+        for gy, label in groups:
+            ax_a.text(
+                -0.47,
+                gy,
+                label,
+                transform=ax_a.get_yaxis_transform(),
+                ha="left",
+                va="center",
+                weight="bold",
+            )
+        legend = {"loc": "upper center", "bbox_to_anchor": (0.5, 1.14), "frameon": False}
+        ax_a.legend(
+            handles=[
+                Line2D(
+                    [],
+                    [],
+                    color=PAPER_GREY,
+                    lw=0.8,
+                    marker="o",
+                    ms=3.2,
+                    mfc="white",
+                    mew=0.7,
+                    label="Direct API",
+                ),
+                Line2D(
+                    [],
+                    [],
+                    color=PAPER_COLORS["provider"],
+                    lw=0.8,
+                    marker="o",
+                    ms=3.2,
+                    mew=0.7,
+                    label="Simple Chat, on screen",
+                ),
+            ],
+            ncol=2,
+            handlelength=1.6,
+            columnspacing=1.2,
+            **legend,
+        )
+        ax_b.legend(
+            handles=[
+                plt.Rectangle((0, 0), 1, 1, color=PAPER_COLORS["provider"], label="Provider API"),
+                plt.Rectangle(
+                    (0, 0), 1, 1, color=PAPER_COLORS["overhead"], label="Simple Chat + browser"
+                ),
+                plt.Rectangle(
+                    (0, 0), 1, 1, color=PAPER_COLORS["animation"], label="Display animation"
+                ),
+            ],
+            ncol=3,
+            handlelength=0.9,
+            handleheight=0.8,
+            handletextpad=0.4,
+            columnspacing=0.8,
+            **legend,
+        )
+        for ax, letter, x in ((ax_a, "a", -0.47), (ax_b, "b", -0.02)):
+            ax.tick_params(axis="y", length=0)
+            ax.text(x, 1.10, letter, transform=ax.transAxes, fontsize=8, weight="bold", va="bottom")
+        fig.subplots_adjust(left=0.21, right=0.98, bottom=0.18, top=0.86, wspace=0.12)
+        for ext in ("pdf", "png"):
+            fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=600)
+        plt.close(fig)
+    print(f"paper figure ({day}) -> {out_stem.with_suffix('.pdf')}")
 
 
 def main() -> None:
@@ -249,8 +595,16 @@ def main() -> None:
         over.write_csv(args.out_dir / "overhead.csv")
         print(f"overhead -> {args.out_dir / 'overhead.csv'}")
 
+    over_e2e = overhead_e2e(summary)
+    if not over_e2e.is_empty():
+        over_e2e.write_csv(args.out_dir / "overhead-e2e.csv")
+        print(f"overhead -> {args.out_dir / 'overhead-e2e.csv'}")
+
     plot(summary, args.out_dir / "latency")
     print(f"figure -> {args.out_dir / 'latency.png'}")
+    plot_e2e(summary, args.out_dir / "latency-e2e")
+    print(f"figure -> {args.out_dir / 'latency-e2e.png'}")
+    plot_paper(df, args.out_dir / "latency-paper")
 
 
 if __name__ == "__main__":
