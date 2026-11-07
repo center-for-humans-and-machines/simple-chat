@@ -1,14 +1,19 @@
 from typing import List, Optional
 
+import math
+
 import requests
 import tiktoken
 # Note: The openai-python library support for Azure OpenAI is in preview.
 from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAI
 from src.models.message import OpenAIMessage
+from src.models.models import Project
 from src.models.settings import get_settings
 from src.utils.configs import models
 from src.utils.db import create_message
+from src.utils.limits import limit_message, reserve_tokens, settle_tokens
 from src.utils.logging import setup_logger
+from src.utils.usage import record_usage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 logger = setup_logger(__name__)
@@ -118,10 +123,14 @@ async def call_model(
     session_id: str,
     experiment_id: str,
     participant_id: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> OpenAIMessage:
     model = model.replace("together_ai-", "")  # for together call
 
     request_token_count, images_volume_total = calculate_limits(messages)
+    # the token caps need an upper bound on what the provider counts, including
+    # message overhead and images, not only the text
+    prompt_estimate = estimate_prompt_tokens(messages, model)
 
     if request_token_count > token_count_limit:
         raise TokenError(
@@ -135,6 +144,27 @@ async def call_model(
             images_volume_total,
         )
 
+    # reserve the tokens this call may use before it starts, so that neither a
+    # long reply nor concurrent calls can go past the project's token caps
+    reservation = None
+    used_tokens = 0
+    if project_id is not None:
+        project = await Project.find_one({"project_id": project_id})
+        if project is not None:
+            reservation, reason = await reserve_tokens(
+                project, prompt_estimate, conversation_id=session_id
+            )
+            if reason:
+                logger.info(f"Participant {participant_id} blocked by project limit: {reason}")
+                await sio_server.emit(
+                    "limit_reached", {"reason": reason, "message": limit_message(reason)}, sid
+                )
+                return "ExceptionError"  # the reply is not generated and not saved
+
+    completion_kwargs = {}
+    if reservation is not None and reservation.max_tokens is not None:
+        completion_kwargs["max_tokens"] = reservation.max_tokens
+
     try:
         response = await completion_with_backoff(
             client,
@@ -142,6 +172,7 @@ async def call_model(
             messages=messages,
             temperature=0.7,
             stream=True,
+            **completion_kwargs,
         )
 
         full_response = ""
@@ -212,6 +243,25 @@ async def call_model(
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
 
+        # the provider generates at most max_tokens, whatever tiktoken counts
+        completion_estimate = response_token_count
+        if completion_kwargs.get("max_tokens") is not None:
+            completion_estimate = min(completion_estimate, completion_kwargs["max_tokens"])
+        used_tokens = prompt_estimate + completion_estimate
+
+        if project_id is not None:
+            # streamed responses carry no `usage` with the pinned openai client,
+            # so these counts are tiktoken estimates
+            await record_usage(
+                project_id=project_id,
+                model=model,
+                prompt_tokens=prompt_estimate,
+                completion_tokens=completion_estimate,
+                estimated=True,
+                conversation_id=session_id,
+                participant_id=participant_id,
+            )
+
         if total_token_count > token_count_limit:
             raise TokenError(
                 f"Token limit of {token_count_limit} for participant {participant_id} exceeded, total token count is {total_token_count}",
@@ -236,6 +286,10 @@ async def call_model(
 
         return "ExceptionError"  # to make sure the flow of the program is not disrupted. this record will not be saved.
 
+    finally:
+        # keep the budgets equal to the recorded usage
+        await settle_tokens(reservation, used_tokens)
+
 
 token_count_limit = 8000
 image_volume_limit = 2000 * 1024  # the unit is byte (KB * 1024)
@@ -259,6 +313,57 @@ def calculate_limits(messages):
             request_token_count += num_tokens_from_string(message["content"])
 
     return request_token_count, images_volume_total
+
+
+# Tokens a provider adds per message and to prime the reply.
+MESSAGE_OVERHEAD_TOKENS = 4
+REPLY_OVERHEAD_TOKENS = 3
+
+# Text is counted with cl100k_base, the only encoding of the pinned tiktoken.
+# It is exact for the GPT-4 and GPT-3.5 models; for other tokenizers the count
+# is raised by a margin so that it stays an upper bound.
+TEXT_MARGIN = {"gpt-4": 1.0, "gpt-4-turbo": 1.0, "gpt-3.5-turbo": 1.0}
+OPENAI_TEXT_MARGIN = 1.1  # o200k_base (gpt-4o, gpt-4o-mini)
+OTHER_TEXT_MARGIN = 1.25  # other providers' tokenizers
+
+# Most tokens an image can cost: a high-detail image is scaled to at most
+# 768 x 2048 pixels, which is 8 tiles of 512 pixels (base + 8 * per tile).
+IMAGE_TOKENS = {
+    "gpt-4o": 85 + 8 * 170,
+    "gpt-4-turbo": 85 + 8 * 170,
+    "gpt-4o-mini": 2833 + 8 * 5667,
+}
+DEFAULT_IMAGE_TOKENS = 85 + 8 * 170
+
+
+def _text_margin(model: str) -> float:
+    model = model.replace("together_ai-", "")
+    if model in TEXT_MARGIN:
+        return TEXT_MARGIN[model]
+    return OPENAI_TEXT_MARGIN if model in models["openai"] else OTHER_TEXT_MARGIN
+
+
+def estimate_prompt_tokens(messages: list, model: str, extra: str = "") -> int:
+    """Upper bound on the prompt tokens a provider counts for these messages.
+
+    Used to reserve token budget before a call, so it errs on the high side.
+    """
+    model = model.replace("together_ai-", "")
+    text_tokens = num_tokens_from_string(extra)
+    image_tokens = 0
+    for message in messages:
+        content = message.get("content") or ""
+        if isinstance(content, list):
+            for part in content:
+                if part.get("type") == "text":
+                    text_tokens += num_tokens_from_string(part.get("text", ""))
+                elif part.get("type") == "image_url":
+                    image_tokens += IMAGE_TOKENS.get(model, DEFAULT_IMAGE_TOKENS)
+        else:
+            text_tokens += num_tokens_from_string(str(content))
+
+    overhead = REPLY_OVERHEAD_TOKENS + MESSAGE_OVERHEAD_TOKENS * len(messages)
+    return math.ceil(text_tokens * _text_margin(model)) + image_tokens + overhead
 
 
 def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:

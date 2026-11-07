@@ -1,6 +1,27 @@
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
+import pymongo
 from beanie import Document
+from pydantic import BaseModel, Field
+
+
+class ProjectLimits(BaseModel):
+    # None means "no limit"
+    max_conversations_per_participant: Optional[int] = Field(default=None, ge=1)
+    max_turns: Optional[int] = Field(default=None, ge=1)
+    max_tokens_per_conversation: Optional[int] = Field(default=None, ge=1)
+    max_tokens_per_project: Optional[int] = Field(default=None, ge=1)
+    # empty list means every participant is allowed
+    participant_allowlist: List[str] = Field(default_factory=list)
+    # at most rate_limit_messages conversation starts and messages per
+    # rate_limit_window_seconds, counted per participant_id or per IP address
+    rate_limit_messages: Optional[int] = Field(default=None, ge=1)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=24 * 60 * 60)
+    rate_limit_key: Literal["participant", "ip"] = "participant"
+    # origins (e.g. https://*.qualtrics.com) allowed to embed the chat in an
+    # iframe; empty list means any site may embed it
+    allowed_embed_origins: List[str] = Field(default_factory=list)
 
 
 class Project(Document):
@@ -11,6 +32,9 @@ class Project(Document):
     loading_message: Optional[str] = None
     active: bool
     openai_backend: Optional[str] = "azure"
+    # used when the chat URL has no `model` query parameter
+    model: Optional[str] = None
+    limits: ProjectLimits = Field(default_factory=ProjectLimits)
 
 
 class LlmCall(Document):
@@ -27,3 +51,51 @@ class CustomSystemMessage(Document):
     created_by: str
     assistant_first: bool
     created_at: str
+
+
+class TokenUsage(Document):
+    project_id: str
+    conversation_id: Optional[str] = None
+    participant_id: Optional[str] = None
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    # True when counted locally with tiktoken instead of reported by the provider
+    estimated: bool = False
+    source: str = "chat"  # "chat" (participant conversations) or "llm_api" (/llm/* routes)
+    created_at: str
+
+    class Settings:
+        # project and conversation caps aggregate by these on every message
+        indexes = ["project_id", "conversation_id"]
+
+
+class TokenBudget(Document):
+    # "project:<project_id>" or "conversation:<conversation_id>"
+    key: str
+    # recorded usage plus the tokens reserved by model calls still in flight;
+    # only changed with atomic $inc so concurrent calls cannot pass the cap together
+    tokens: int = 0
+
+    class Settings:
+        indexes = [pymongo.IndexModel([("key", pymongo.ASCENDING)], unique=True)]
+
+
+class RateLimitWindow(Document):
+    project_id: str
+    key: str  # "participant:<id>" or "ip:<address>"
+    # times of the conversation starts and messages admitted in the current window;
+    # kept in one document so admission is a single atomic update
+    events: List[datetime] = Field(default_factory=list)
+    # whether the last update admitted its event
+    admitted: bool = False
+    # the window is no longer needed once its newest event has left it
+    expires_at: Optional[datetime] = None
+
+    class Settings:
+        indexes = [
+            pymongo.IndexModel(
+                [("project_id", pymongo.ASCENDING), ("key", pymongo.ASCENDING)], unique=True
+            ),
+            pymongo.IndexModel([("expires_at", pymongo.ASCENDING)], expireAfterSeconds=0),
+        ]

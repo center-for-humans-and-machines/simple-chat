@@ -20,7 +20,7 @@ Simple Chat includes a Docker Compose file for local development. It offers two 
 | Stop                                          | `docker compose --profile dev stop`                | `docker compose --profile prod stop`                |
 | Stop and remove (local database data is lost) | `docker compose --profile dev down --volumes`      | `docker compose --profile prod down --volumes`      |
 
-The development frontend is accessible on localhost:1234 and the dashboard on localhost:3001. The production profile builds the React projects and serves them with nginx; the frontend is accessible on localhost:8080.
+The development frontend is accessible on localhost:1234 and the dashboard on localhost:3001. The production profile builds the React projects and serves them with nginx; the frontend is accessible on localhost:8080 and the dashboard on localhost:8081.
 
 ## Production
 
