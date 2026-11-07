@@ -3,6 +3,7 @@ import { Typography, Button, TextareaAutosize, Container } from "@mui/material";
 import { useParams } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import { authFetch } from "../authHeaders";
 
 function SystemMessagePage() {
   const { project_id } = useParams();
@@ -21,7 +22,7 @@ function SystemMessagePage() {
     try {
       let backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(
+      const response = await authFetch(
         `${backendURL}/dashboard/update_system_message`,
         {
           method: "POST",
@@ -57,7 +58,7 @@ function SystemMessagePage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/project/${local_project_id}`
         );
 
