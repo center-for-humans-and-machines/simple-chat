@@ -49,7 +49,10 @@ async def completion_with_backoff(client, **kwargs):
                 **kwargs.get("extra_body", {}),
                 "reasoning_effort": settings.openai_reasoning_effort,
             }
-    if f"together_ai-{kwargs['model']}" in models["together_ai"] and settings.together_ai_reasoning_effort:
+    if (
+        f"together_ai-{kwargs['model']}" in models["together_ai"]
+        and settings.together_ai_reasoning_effort
+    ):
         # Hybrid open-weights models (e.g. DeepSeek-V4.1-Flash) think by default;
         # "none" switches thinking off.
         kwargs["extra_body"] = {
