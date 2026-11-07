@@ -8,12 +8,11 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Divider,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
   TextField,
   Typography
 } from "@mui/material";
@@ -118,60 +117,64 @@ function ResearchersList() {
           their e-mail.
         </Typography>
       ) : (
-        <TableContainer
-          sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}
+        <List
+          sx={{
+            p: 0,
+            width: "100%",
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            backgroundColor: "background.paper"
+          }}
         >
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>E-mail</TableCell>
-                <TableCell>Projects</TableCell>
-                <TableCell align="right">Password</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {researchers.map(researcher => (
-                <TableRow key={researcher.email}>
-                  <TableCell>
-                    {researcher.email}
-                    {!researcher.has_account && (
-                      <Chip
-                        label="no password"
-                        size="small"
-                        color="warning"
-                        variant="outlined"
-                        sx={{ ml: 1 }}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {researcher.projects.length === 0 && "–"}
-                      {researcher.projects.map(project => (
+          {researchers.map((researcher, index) => (
+            <Box component="li" key={researcher.email}>
+              {index > 0 && <Divider />}
+              <ListItem
+                secondaryAction={
+                  <Button size="small" onClick={() => openDialog(researcher)}>
+                    {researcher.has_account ? "Reset password" : "Set password"}
+                  </Button>
+                }
+              >
+                <ListItemText
+                  primary={
+                    <>
+                      <b>{researcher.email}</b>
+                      {!researcher.has_account && (
                         <Chip
-                          key={project.project_id}
-                          label={project.project_id}
+                          label="no password"
                           size="small"
-                          variant={project.active ? "filled" : "outlined"}
-                          onClick={() =>
-                            navigate(`/project/${project.project_id}`)
-                          }
+                          color="warning"
+                          variant="outlined"
+                          sx={{ ml: 1 }}
                         />
-                      ))}
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button size="small" onClick={() => openDialog(researcher)}>
-                      {researcher.has_account
-                        ? "Reset password"
-                        : "Set password"}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                      )}
+                    </>
+                  }
+                  secondary={`${researcher.projects.length} project${
+                    researcher.projects.length === 1 ? "" : "s"
+                  }`}
+                />
+              </ListItem>
+              <List disablePadding>
+                {researcher.projects.map(project => (
+                  <ListItemButton
+                    key={project.project_id}
+                    sx={{ pl: 6 }}
+                    onClick={() => navigate(`/project/${project.project_id}`)}
+                  >
+                    <ListItemText
+                      primary={`${project.project_id} - ${
+                        project.active ? "active" : "deactive"
+                      }`}
+                    />
+                  </ListItemButton>
+                ))}
+              </List>
+            </Box>
+          ))}
+        </List>
       )}
 
       <Dialog
