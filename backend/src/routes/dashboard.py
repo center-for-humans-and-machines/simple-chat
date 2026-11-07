@@ -1,13 +1,15 @@
 # routes.py
 import os
 import re
+from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from src.models.message import Conversations
 from src.models.models import Project, ProjectLimits, Researcher, TokenUsage
-from src.utils.auth import (admin_user, authenticate, create_token,
-                            current_user, project_for_user)
+from src.utils.auth import (PASSWORD_MIN_LENGTH, admin_user, authenticate,
+                            create_token, current_user, hash_password,
+                            project_for_user)
 from src.utils.configs import model_prices
 from src.utils.logging import setup_logger
 from src.utils.usage import summarize_usage
@@ -36,6 +38,63 @@ async def login(data: LoginInput):
         "admin": user["admin"],
         "token": create_token(user["email"], user["admin"]),
     }
+
+
+class PasswordInput(BaseModel):
+    password: str
+
+
+@dashboard_router.get("/researchers")
+async def list_of_researchers(user: dict = Depends(admin_user)):
+    """Researchers and their projects, including project owners without an account."""
+    admin_email = os.environ["DASHBOARD_USERNAME_ADMIN"]
+    researchers = {
+        r.email: {"email": r.email, "has_account": True, "projects": []}
+        for r in await Researcher.find_all().to_list()
+    }
+    for project in await Project.find_all().to_list():
+        if project.created_by == admin_email:
+            continue
+        researcher = researchers.setdefault(
+            project.created_by,
+            {"email": project.created_by, "has_account": False, "projects": []},
+        )
+        researcher["projects"].append(
+            {"project_id": project.project_id, "active": project.active}
+        )
+    return sorted(researchers.values(), key=lambda r: r["email"].lower())
+
+
+@dashboard_router.put("/researchers/{email}/password")
+async def set_researcher_password(
+    email: str, data: PasswordInput, user: dict = Depends(admin_user)
+):
+    """Reset a researcher's password, or create the account for a project owner without one."""
+    email = email.strip()
+    if email == os.environ["DASHBOARD_USERNAME_ADMIN"]:
+        raise HTTPException(
+            status_code=400, detail="the admin password is set with DASHBOARD_PASSWORD_ADMIN."
+        )
+    if len(data.password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"the password must have at least {PASSWORD_MIN_LENGTH} characters.",
+        )
+
+    researcher = await Researcher.find_one({"email": email})
+    if researcher:
+        researcher.password_hash = hash_password(data.password)
+        await researcher.save()
+    else:
+        if not await Project.find_one({"created_by": email}):
+            raise HTTPException(status_code=404, detail="researcher not found")
+        await Researcher(
+            email=email,
+            password_hash=hash_password(data.password),
+            created_at=str(datetime.now()),
+        ).insert()
+
+    return {"status": True, "email": email}
 
 
 @dashboard_router.get("/researchers/{email}")

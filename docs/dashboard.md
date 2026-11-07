@@ -22,7 +22,9 @@ As admin, click **Create a new project** and fill in:
 
 If the e-mail belongs to a new researcher, a second step asks for the password this researcher will log in with (at least 8 characters, entered twice). Share it with the researcher securely. The account is stored in the `Researcher` collection with a salted PBKDF2 hash of the password. Later projects for the same e-mail use the existing account and do not ask again.
 
-Researchers whose projects were created before passwords existed have no account yet. Create a new project for their e-mail to set one.
+### Researchers
+
+Below the project list, the admin sees all researchers with their projects (click a project to open it). **Reset password** sets a new password; the old one stops working for new logins, but a researcher who is already logged in stays logged in until their token expires (at most 7 days). Researchers whose projects were created before passwords existed are marked **no password**; **Set password** creates their account.
 
 ### User
 
