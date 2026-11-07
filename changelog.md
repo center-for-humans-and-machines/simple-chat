@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Researchers list for the admin on the dashboard projects page, with each researcher's projects and a password reset (`GET /dashboard/researchers`, `PUT /dashboard/researchers/{email}/password`)
 - Quick Start section in the readme (clone, `.env`, Docker Compose, dashboard, embed, export)
 - Default model per project, chosen when creating a project in the dashboard
 - Iframe embed code and test chat link on the dashboard project page

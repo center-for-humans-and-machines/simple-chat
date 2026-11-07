@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import ResearchersList from "../components/ResearchersList";
 import { AuthContext } from "../contexts/AuthContext";
 import { authFetch } from "../authHeaders";
 
@@ -109,6 +110,8 @@ function FirstPage() {
             })}
           </List>
         </div>
+
+        {authData.admin && <ResearchersList />}
       </Container>
     </>
   );
