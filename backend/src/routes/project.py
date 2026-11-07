@@ -35,7 +35,7 @@ class CustomSystemMessageInput(BaseModel):
 
 
 @project_router.get("/models")
-async def available_models():
+async def get_available_models():
     return {
         "models": available_models,
         "default": settings.openai_default_model,
