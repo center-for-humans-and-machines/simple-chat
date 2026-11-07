@@ -31,7 +31,8 @@ Simple Chat includes a Docker Compose file for local development. The applicatio
 
   - in **production** environment:
 
-    It builds the react project and use nginx to serve it. Frontend will be accessible on localhost:8080
+    It builds the React projects and uses nginx to serve them. The frontend is
+    available at localhost:8080 and the dashboard at localhost:8081.
 
     ```bash
     ./script/start-prod

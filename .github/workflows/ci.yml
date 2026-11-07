@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install shell and Dockerfile linters
+        run: |
+          case "$RUNNER_ARCH" in
+            X64)
+              shfmt_asset=shfmt_v3.12.0_linux_amd64
+              shfmt_sha=d9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea
+              hadolint_asset=hadolint-linux-x86_64
+              hadolint_sha=6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47
+              ;;
+            ARM64)
+              shfmt_asset=shfmt_v3.12.0_linux_arm64
+              shfmt_sha=5f3fe3fa6a9f766e6a182ba79a94bef8afedafc57db0b1ad32b0f67fae971ba4
+              hadolint_asset=hadolint-linux-arm64
+              hadolint_sha=331f1d3511b84a4f1e3d18d52fec284723e4019552f4f47b19322a53ce9a40ed
+              ;;
+            *) echo "Unsupported runner architecture: $RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/shfmt" \
+            "https://github.com/mvdan/sh/releases/download/v3.12.0/$shfmt_asset"
+          echo "$shfmt_sha  $RUNNER_TEMP/shfmt" | sha256sum --check
+          sudo install -m 755 "$RUNNER_TEMP/shfmt" /usr/local/bin/shfmt
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v2.14.0/$hadolint_asset"
+          echo "$hadolint_sha  $RUNNER_TEMP/hadolint" | sha256sum --check
+          sudo install -m 755 "$RUNNER_TEMP/hadolint" /usr/local/bin/hadolint
+      - name: Run pre-commit
+        run: uvx pre-commit@4.7.0 run --all-files --show-diff-on-failure
+
+  build:
+    name: Build
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build development and production images
+        run: |
+          docker compose --profile dev build --pull
+          docker compose --profile prod build --pull
+
+  smoke:
+    name: Smoke test
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: simple-chat-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create local test configuration
+        run: bash .github/scripts/prepare-ci-env.sh
+      - name: Start production stack
+        run: docker compose --profile prod up --build --wait --wait-timeout 120 --detach
+      - name: Check HTTP responses
+        run: |
+          curl --fail --show-error http://localhost:8000/health
+          curl --fail --show-error http://localhost:8080/
+          curl --fail --show-error http://localhost:8081/
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --profile prod logs --no-color
+      - name: Clean up containers
+        if: always()
+        run: docker compose --profile prod down --volumes --remove-orphans
+
+  test:
+    name: Tests
+    runs-on: ${{ vars.RUNNER == 'self-hosted' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      COMPOSE_PROJECT_NAME: simple-chat-test-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create local test configuration
+        run: bash .github/scripts/prepare-ci-env.sh
+      - name: Build test images
+        run: docker compose --profile dev build --pull backend frontend-dev
+      - name: Test backend
+        run: docker compose --profile dev run --rm --no-deps backend poetry run python -m pytest -q
+      - name: Test frontend
+        run: docker compose --profile dev run --rm --no-deps frontend-dev npm test -- --watch=false --runInBand
+      - name: Clean up containers
+        if: always()
+        run: docker compose --profile dev down --volumes --remove-orphans

@@ -9,5 +9,4 @@ set -o nounset
 # shellcheck disable=SC1091
 source utils.sh
 
-./script/lint-superlinter
-./script/lint-precommit
+exec ./script/lint-precommit
