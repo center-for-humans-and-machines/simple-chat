@@ -9,9 +9,10 @@ prompt and records:
   screen. The frontend types replies out at 20 ms per character, so on-screen
   completion is mostly set by that animation, not by the network.
 
-Devices: desktop Chrome (installed Google Chrome), plus emulated mobile devices
-(Android Chrome via Chromium, iPhone Safari via WebKit). Emulation reproduces the
-viewport, user agent and touch input, not real phone hardware or networks.
+Devices: desktop Chrome (installed Google Chrome) and an emulated iPhone Safari
+(WebKit) by default; an emulated Android Chrome (Chromium) is available with
+--device. Emulation reproduces the viewport, user agent and touch input, not real
+phone hardware or networks.
 
 Like run_backend.py, it runs blocks of one condition x streaming mode x number of
 concurrent sessions (1, 5, 20 by default): that many browser sessions, each a
@@ -396,8 +397,9 @@ def main() -> None:
     parser.add_argument(
         "--device",
         nargs="+",
-        default=["desktop-chrome", "android-chrome", "iphone-safari"],
+        default=["desktop-chrome", "iphone-safari"],
         choices=sorted(DEVICES),
+        help="browsers to run (default: desktop Chrome and emulated iPhone Safari)",
     )
     parser.add_argument("--stream", nargs="+", default=["on", "off"], help="on and/or off")
     parser.add_argument(

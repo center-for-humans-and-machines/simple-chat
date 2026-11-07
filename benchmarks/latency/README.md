@@ -66,7 +66,7 @@ python run_backend.py --config conditions.toml
 # Direct-to-provider baseline (reads the same keys as the backend)
 python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
 
-# End to end in browsers: desktop Chrome, emulated Android and iPhone,
+# End to end in browsers: desktop Chrome and emulated iPhone Safari,
 # 1/5/20 sessions open at once, 30 measured trials per block
 python run_e2e.py --config conditions.toml --trials 30
 
