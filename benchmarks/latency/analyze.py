@@ -3,9 +3,14 @@
 Reads every CSV in data/raw/ (or the files given), drops warm-up requests and writes:
 
 - results/summary.csv   p50/p95 of each latency metric per condition, plus error rate
-- results/overhead.csv  Simple Chat minus direct-to-provider p50/p95 (where both exist)
+- results/overhead.csv  Simple Chat backend minus direct-to-provider p50/p95
+- results/overhead-e2e.csv  on-screen times in the browser minus direct-to-provider p50/p95
 - results/latency.png / .pdf  backend TTFT and full completion vs concurrent sessions
-- results/latency-e2e.png / .pdf  first and last character on screen in the browser
+- results/latency-e2e.png / .pdf  first and last character on screen in the browser,
+  next to the direct-to-provider baseline
+
+Simple Chat runs are compared only with direct-to-provider runs from the same day
+(`date`), so that provider load is similar.
 
 Usage:
     python analyze.py
@@ -29,7 +34,7 @@ import polars as pl
 from common import RAW_DIR, RESULTS_DIR
 from matplotlib.lines import Line2D
 
-GROUP = ["mode", "condition", "provider", "model", "stream", "concurrency", "device"]
+GROUP = ["mode", "date", "condition", "provider", "model", "stream", "concurrency", "device"]
 METRICS = ["setup_s", "ttft_s", "total_s", "ttft_render_s", "total_render_s"]
 
 # Reference palette slots 1 and 2 (a validated adjacent pair); text stays in ink colors.
@@ -45,6 +50,7 @@ def load(paths: list[Path]) -> pl.DataFrame:
             df = df.with_columns(pl.lit(None).alias(col))
     return df.with_columns(
         pl.col("device").fill_null("none"),
+        pl.col("started_at").cast(pl.Utf8).str.slice(0, 10).alias("date"),
         pl.col("stream").cast(pl.Utf8).str.to_lowercase().eq("true"),
         pl.col("warmup").cast(pl.Utf8).str.to_lowercase().eq("true"),
         *[pl.col(m).cast(pl.Float64) for m in METRICS],
@@ -70,7 +76,7 @@ def summarise(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def overhead(summary: pl.DataFrame) -> pl.DataFrame:
-    keys = ["condition", "provider", "stream", "concurrency"]
+    keys = ["date", "condition", "provider", "stream", "concurrency"]
     cols = [
         c
         for c in ("ttft_s_p50", "ttft_s_p95", "total_s_p50", "total_s_p95")
@@ -84,6 +90,47 @@ def overhead(summary: pl.DataFrame) -> pl.DataFrame:
     return joined.select(
         keys + [(pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}") for c in cols]
     ).sort(keys)
+
+
+def overhead_e2e(summary: pl.DataFrame) -> pl.DataFrame:
+    """On-screen times minus the same-day direct-to-provider times.
+
+    First character on screen is compared with the direct time to first token, and the
+    full reply on screen with the direct full completion.
+    """
+    keys = ["date", "condition", "provider", "stream", "concurrency"]
+    pairs = {
+        "first_char": ("ttft_render_s", "ttft_s"),
+        "full_reply": ("total_render_s", "total_s"),
+    }
+    if "total_render_s_p50" not in summary.columns:
+        return pl.DataFrame()
+    e2e = summary.filter(pl.col("mode") == "e2e")
+    direct = summary.filter(pl.col("mode") == "direct").select(
+        keys + [f"{d}_{q}" for _, d in pairs.values() for q in ("p50", "p95")]
+    )
+    if e2e.is_empty() or direct.is_empty():
+        return pl.DataFrame()
+    joined = e2e.join(direct, on=keys, suffix="_direct")
+    return joined.select(
+        keys
+        + ["device"]
+        + [
+            (pl.col(f"{screen}_{q}") - pl.col(f"{d}_{q}_direct"))
+            .round(3)
+            .alias(f"overhead_{n}_{q}")
+            for n, (screen, d) in pairs.items()
+            for q in ("p50", "p95")
+        ]
+    ).sort(keys + ["device"])
+
+
+def _same_day_direct(summary: pl.DataFrame, mode: str) -> pl.DataFrame:
+    """Rows of `mode` plus the direct-to-provider rows from the same days."""
+    rows = summary.filter(pl.col("mode") == mode)
+    days = rows["date"].unique().to_list()
+    direct = summary.filter((pl.col("mode") == "direct") & pl.col("date").is_in(days))
+    return pl.concat([rows, direct], how="diagonal_relaxed")
 
 
 # Line style per device in the end-to-end figure; color still encodes streaming.
@@ -123,7 +170,7 @@ def _p50_with_p95(ax, xs, p50, p95, **style) -> None:
     )
 
 
-def _grid(data, rows, series, draw, handles, out_stem: Path) -> None:
+def _grid(data, rows, series, draw, handles, out_stem: Path, note: str = "") -> None:
     """One column per condition, one row per metric, one line per series."""
     matplotlib.use("Agg")
     _style_rc()
@@ -175,7 +222,7 @@ def _grid(data, rows, series, draw, handles, out_stem: Path) -> None:
     fig.text(
         0.5,
         -0.01,
-        "Points: median (p50). Whiskers: up to p95.",
+        "Points: median (p50). Whiskers: up to p95." + (f" {note}" if note else ""),
         ha="center",
         color=INK_MUTED,
         fontsize=8,
@@ -188,9 +235,9 @@ def _grid(data, rows, series, draw, handles, out_stem: Path) -> None:
 
 def plot(summary: pl.DataFrame, out_stem: Path) -> None:
     """Backend and direct-to-provider times (what the Simple Chat server sees)."""
-    data = summary.filter(pl.col("mode").is_in(["backend", "direct"]))
-    if data.is_empty():
-        print("no backend/direct rows to plot")
+    data = _same_day_direct(summary, "backend")
+    if data.filter(pl.col("mode") == "backend").is_empty():
+        print("no backend rows to plot")
         return
 
     def draw(ax, key, xs, p50, p95):
@@ -245,8 +292,22 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
 
 def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
     """On-screen times in the browser (what participants see)."""
-    data = summary.filter(pl.col("mode") == "e2e")
-    if data.is_empty() or "total_render_s_p50" not in data.columns:
+    if "total_render_s_p50" not in summary.columns:
+        print("no e2e rows to plot")
+        return
+    # The direct baseline has no screen: plot its time to first token and full
+    # completion in the first-character and full-reply rows.
+    data = _same_day_direct(summary, "e2e").with_columns(
+        *[
+            pl.when(pl.col("mode") == "direct")
+            .then(pl.col(f"{d}_{q}"))
+            .otherwise(pl.col(f"{screen}_{q}"))
+            .alias(f"{screen}_{q}")
+            for screen, d in (("ttft_render_s", "ttft_s"), ("total_render_s", "total_s"))
+            for q in ("p50", "p95")
+        ]
+    )
+    if data.filter(pl.col("mode") == "e2e").is_empty():
         print("no e2e rows to plot")
         return
     devices = [d for d in DEVICE_STYLES if d in set(data["device"].to_list())]
@@ -254,7 +315,20 @@ def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
     nudge = {d: (i - (len(devices) - 1) / 2) * 0.08 for i, d in enumerate(devices)}
 
     def draw(ax, key, xs, p50, p95):
-        device, stream = key
+        mode, device, stream = key
+        if mode == "direct":
+            ax.plot(
+                xs,
+                p50,
+                color=STREAM_COLORS[stream],
+                lw=1.5,
+                ls="--",
+                marker="o",
+                ms=4,
+                mfc="white",
+                zorder=2,
+            )
+            return
         ls, marker, _ = DEVICE_STYLES.get(device, ("-", "o", device))
         xs = [x + nudge.get(device, 0) for x in xs]
         _p50_with_p95(
@@ -284,11 +358,25 @@ def plot_e2e(summary: pl.DataFrame, out_stem: Path) -> None:
         )
         for d in devices
     ]
+    if not data.filter(pl.col("mode") == "direct").is_empty():
+        handles.append(
+            Line2D(
+                [],
+                [],
+                color=INK_MUTED,
+                lw=1.5,
+                ls="--",
+                marker="o",
+                mfc="white",
+                label="Direct to provider (p50)",
+            )
+        )
     rows = [
         ("ttft_render_s", "First character on screen (s)"),
         ("total_render_s", "Full reply on screen (s)"),
     ]
-    _grid(data, rows, ["device", "stream"], draw, handles, out_stem)
+    note = "Direct to provider: time to first token and full completion, no display."
+    _grid(data, rows, ["mode", "device", "stream"], draw, handles, out_stem, note)
 
 
 def main() -> None:
@@ -311,6 +399,11 @@ def main() -> None:
     if not over.is_empty():
         over.write_csv(args.out_dir / "overhead.csv")
         print(f"overhead -> {args.out_dir / 'overhead.csv'}")
+
+    over_e2e = overhead_e2e(summary)
+    if not over_e2e.is_empty():
+        over_e2e.write_csv(args.out_dir / "overhead-e2e.csv")
+        print(f"overhead -> {args.out_dir / 'overhead-e2e.csv'}")
 
     plot(summary, args.out_dir / "latency")
     print(f"figure -> {args.out_dir / 'latency.png'}")

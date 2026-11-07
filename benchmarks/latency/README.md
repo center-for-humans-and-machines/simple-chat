@@ -8,8 +8,9 @@ ones cited in the Simple Chat paper.
 The committed CSVs cover OpenAI GPT-5.1, Azure GPT-5.1, and Together AI DeepSeek
 V4.1 Flash in backend and direct modes (6 November 2026), and the same three
 conditions end to end in desktop Chrome and an emulated iPhone Safari (7 November
-2026, `e2e-*.csv`). The end-to-end runs used the production Docker stack
-(`docker compose --profile prod`) on the benchmark machine. The example
+2026, `e2e-*.csv`), with a direct-to-provider baseline from the same day. The
+end-to-end runs used the production Docker stack (`docker compose --profile prod`)
+on the benchmark machine. The example
 configuration names these same conditions.
 
 ## What Is Measured
@@ -73,6 +74,9 @@ python run_backend.py --config conditions.toml --mode direct --env-file ../../ba
 # 1/5/20 sessions open at once, 30 measured trials per block
 python run_e2e.py --config conditions.toml --trials 30
 
+# Direct baseline for the end-to-end run, on the same day with the same 30 requests
+python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env --requests-per-block 30
+
 # p50/p95 table, overhead table and figures
 python analyze.py
 ```
@@ -82,13 +86,19 @@ combines all of them into:
 
 - `results/summary.csv`: n, error rate, and p50/p95 of every metric per mode,
   condition, streaming, concurrency and device
-- `results/overhead.csv`: Simple Chat minus direct p50/p95, per condition
+- `results/overhead.csv`: Simple Chat backend minus direct p50/p95, per condition
+- `results/overhead-e2e.csv`: first character on screen minus direct time to first
+  token, and full reply on screen minus direct full completion, per condition and
+  device
 - `results/latency.png` and `.pdf`: backend time to first token and full completion
   against concurrent sessions
 - `results/latency-e2e.png` and `.pdf`: first and last character on screen in the
-  browser against concurrent sessions, per device
+  browser against concurrent sessions, per device, next to the direct baseline
 
-The summary CSV and figure for the committed raw data are also versioned here.
+`analyze.py` compares Simple Chat runs only with direct runs from the same day
+(`date` column), so provider load is similar on both sides.
+
+The summary CSV and figures for the committed raw data are also versioned here.
 `overhead.csv` subtracts the two groups' p50 or p95 values. Those differences
 describe the measured groups; they are not per-request overhead measurements.
 
