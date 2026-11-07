@@ -11,13 +11,19 @@ Usage:
     python analyze.py data/raw/backend-*.csv data/raw/direct-*.csv
 """
 
+# plot() lays out one figure step by step.
+# pylint: disable=too-many-locals
+
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
+import matplotlib
+import matplotlib.pyplot as plt
 import polars as pl
 from common import RAW_DIR, RESULTS_DIR
+from matplotlib.lines import Line2D
 
 GROUP = ["mode", "condition", "provider", "model", "stream", "concurrency", "device"]
 METRICS = ["setup_s", "ttft_s", "total_s", "ttft_render_s", "total_render_s"]
@@ -61,23 +67,27 @@ def summarise(df: pl.DataFrame) -> pl.DataFrame:
 
 def overhead(summary: pl.DataFrame) -> pl.DataFrame:
     keys = ["condition", "provider", "stream", "concurrency"]
-    cols = [c for c in ("ttft_s_p50", "ttft_s_p95", "total_s_p50", "total_s_p95") if c in summary.columns]
+    cols = [
+        c
+        for c in ("ttft_s_p50", "ttft_s_p95", "total_s_p50", "total_s_p95")
+        if c in summary.columns
+    ]
     backend = summary.filter(pl.col("mode") == "backend").select(keys + cols)
     direct = summary.filter(pl.col("mode") == "direct").select(keys + cols)
     if backend.is_empty() or direct.is_empty():
         return pl.DataFrame()
     joined = backend.join(direct, on=keys, suffix="_direct")
     return joined.select(
-        keys + [(pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}") for c in cols]
+        keys
+        + [
+            (pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}")
+            for c in cols
+        ]
     ).sort(keys)
 
 
 def plot(summary: pl.DataFrame, out_stem: Path) -> None:
-    import matplotlib
-
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
 
     data = summary.filter(pl.col("mode").is_in(["backend", "direct"]))
     if data.is_empty():
@@ -87,37 +97,78 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
     levels = sorted(data["concurrency"].unique().to_list())
     rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
 
-    plt.rcParams.update({
-        "font.size": 9, "axes.edgecolor": GRID, "axes.labelcolor": INK, "text.color": INK,
-        "xtick.color": INK_MUTED, "ytick.color": INK_MUTED, "axes.titlesize": 10,
-    })
-    fig, axes = plt.subplots(len(rows), len(conditions), figsize=(3.0 * len(conditions), 5.2),
-                             sharex=True, sharey="row", squeeze=False)
+    plt.rcParams.update(
+        {
+            "font.size": 9,
+            "axes.edgecolor": GRID,
+            "axes.labelcolor": INK,
+            "text.color": INK,
+            "xtick.color": INK_MUTED,
+            "ytick.color": INK_MUTED,
+            "axes.titlesize": 10,
+        }
+    )
+    fig, axes = plt.subplots(
+        len(rows),
+        len(conditions),
+        figsize=(3.0 * len(conditions), 5.2),
+        sharex=True,
+        sharey="row",
+        squeeze=False,
+    )
     x_of = {lvl: i for i, lvl in enumerate(levels)}
 
     for col, cond in enumerate(conditions):
         for row, (metric, label) in enumerate(rows):
             ax = axes[row][col]
-            for (mode, stream), part in data.filter(pl.col("condition") == cond).group_by(
-                    ["mode", "stream"], maintain_order=True):
+            for (mode, stream), part in data.filter(
+                pl.col("condition") == cond
+            ).group_by(["mode", "stream"], maintain_order=True):
                 part = part.sort("concurrency")
                 xs = [x_of[c] for c in part["concurrency"]]
-                p50, p95 = part[f"{metric}_p50"].to_list(), part[f"{metric}_p95"].to_list()
+                p50, p95 = (
+                    part[f"{metric}_p50"].to_list(),
+                    part[f"{metric}_p95"].to_list(),
+                )
                 if all(v is None for v in p50):
                     continue
                 color = STREAM_COLORS[stream]
                 if mode == "backend":
                     # p50 line; the whisker reaches up to p95.
-                    ax.errorbar(xs, p50, yerr=[[0] * len(p50), [b - a for a, b in zip(p50, p95)]],
-                                color=color, lw=2, marker="o", ms=6, capsize=3, elinewidth=1.2,
-                                markeredgecolor="white", markeredgewidth=1.5, zorder=3)
+                    ax.errorbar(
+                        xs,
+                        p50,
+                        yerr=[[0] * len(p50), [b - a for a, b in zip(p50, p95)]],
+                        color=color,
+                        lw=2,
+                        marker="o",
+                        ms=6,
+                        capsize=3,
+                        elinewidth=1.2,
+                        markeredgecolor="white",
+                        markeredgewidth=1.5,
+                        zorder=3,
+                    )
                 else:
-                    ax.plot(xs, p50, color=color, lw=1.5, ls="--", marker="o", ms=4,
-                            mfc="white", zorder=2)
+                    ax.plot(
+                        xs,
+                        p50,
+                        color=color,
+                        lw=1.5,
+                        ls="--",
+                        marker="o",
+                        ms=4,
+                        mfc="white",
+                        zorder=2,
+                    )
             ax.set_xticks(range(len(levels)), [str(lvl) for lvl in levels])
             # Shared y-axis per row: fit the largest p95 in the row so no whisker is cut.
-            row_cols = [c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns]
-            row_max = max(data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1)
+            row_cols = [
+                c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns
+            ]
+            row_max = max(
+                data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1
+            )
             ax.set_ylim(0, row_max * 1.08)
             ax.grid(axis="y", color=GRID, lw=0.8)
             ax.set_axisbelow(True)
@@ -131,15 +182,48 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                 ax.set_xlabel("Concurrent sessions")
 
     handles = [
-        Line2D([], [], color=STREAM_COLORS[True], lw=2, marker="o", label="Simple Chat, streaming"),
-        Line2D([], [], color=STREAM_COLORS[False], lw=2, marker="o", label="Simple Chat, non-streaming"),
-        Line2D([], [], color=INK_MUTED, lw=1.5, ls="--", marker="o", mfc="white",
-               label="Direct to provider (p50)"),
+        Line2D(
+            [],
+            [],
+            color=STREAM_COLORS[True],
+            lw=2,
+            marker="o",
+            label="Simple Chat, streaming",
+        ),
+        Line2D(
+            [],
+            [],
+            color=STREAM_COLORS[False],
+            lw=2,
+            marker="o",
+            label="Simple Chat, non-streaming",
+        ),
+        Line2D(
+            [],
+            [],
+            color=INK_MUTED,
+            lw=1.5,
+            ls="--",
+            marker="o",
+            mfc="white",
+            label="Direct to provider (p50)",
+        ),
     ]
-    fig.legend(handles=handles, loc="upper center", ncol=3, frameon=False,
-               bbox_to_anchor=(0.5, 1.0))
-    fig.text(0.5, -0.01, "Points: median (p50). Whiskers: up to p95.", ha="center",
-             color=INK_MUTED, fontsize=8)
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        ncol=3,
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.0),
+    )
+    fig.text(
+        0.5,
+        -0.01,
+        "Points: median (p50). Whiskers: up to p95.",
+        ha="center",
+        color=INK_MUTED,
+        fontsize=8,
+    )
     fig.tight_layout(rect=(0, 0.01, 1, 0.94))
     for ext in ("png", "pdf"):
         fig.savefig(out_stem.with_suffix(f".{ext}"), dpi=200, bbox_inches="tight")
@@ -148,7 +232,9 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)")
+    parser.add_argument(
+        "files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)"
+    )
     parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR)
     args = parser.parse_args()
 

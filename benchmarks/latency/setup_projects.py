@@ -33,11 +33,15 @@ def main() -> None:
             elif "already a project" in r.text:
                 print(f"{cond.pid}: already exists (system message left unchanged)")
             else:
-                raise SystemExit(f"{cond.pid}: register failed: {r.status_code} {r.text}")
+                raise SystemExit(
+                    f"{cond.pid}: register failed: {r.status_code} {r.text}"
+                )
 
             # OpenAI and Azure share model names; the project's backend picks the provider.
             if cond.provider in ("openai", "azure"):
-                r = client.get(f"/dashboard/toggle_openai_backend/{cond.pid}/{cond.provider}")
+                r = client.get(
+                    f"/dashboard/toggle_openai_backend/{cond.pid}/{cond.provider}"
+                )
                 r.raise_for_status()
                 print(f"{cond.pid}: openai_backend = {cond.provider}")
 

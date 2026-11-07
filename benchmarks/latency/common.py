@@ -73,7 +73,9 @@ def load_prompts(path: str | Path) -> list[dict]:
     return prompts
 
 
-def prompt_schedule(prompts: list[dict], reps: int, n_requests: int | None) -> list[tuple[int, dict]]:
+def prompt_schedule(
+    prompts: list[dict], reps: int, n_requests: int | None
+) -> list[tuple[int, dict]]:
     """(rep, prompt) pairs for one condition: the prompt set `reps` times, or exactly
     `n_requests` requests cycling through the prompts in order."""
     n = n_requests if n_requests else reps * len(prompts)
@@ -108,8 +110,12 @@ class RowWriter:
     def __init__(self, path: Path, fieldnames: list[str]):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
+        # The file stays open across write() calls until close().
+        # pylint: disable-next=consider-using-with
         self._file = open(path, "w", newline="", encoding="utf-8")
-        self._writer = csv.DictWriter(self._file, fieldnames=fieldnames, extrasaction="ignore")
+        self._writer = csv.DictWriter(
+            self._file, fieldnames=fieldnames, extrasaction="ignore"
+        )
         self._writer.writeheader()
 
     def write(self, row: dict) -> None:
