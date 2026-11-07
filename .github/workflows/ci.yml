@@ -69,9 +69,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Create local test configuration
-        run: |
-          cp backend/env.example backend/.env
-          sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=ci-dummy-key/' backend/.env
+        run: bash .github/scripts/prepare-ci-env.sh
       - name: Start production stack
         run: docker compose --profile prod up --build --wait --detach
       - name: Check HTTP responses
@@ -100,13 +98,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Create local test configuration
-        run: |
-          cp backend/env.example backend/.env
-          sed -i 's/^OPENAI_API_KEY=.*/OPENAI_API_KEY=ci-dummy-key/' backend/.env
+        run: bash .github/scripts/prepare-ci-env.sh
       - name: Build test images
         run: docker compose --profile dev build --pull backend frontend-dev
       - name: Test backend
-        run: docker compose --profile dev run --rm --no-deps backend poetry run pytest -q
+        run: docker compose --profile dev run --rm --no-deps backend poetry run python -m pytest -q
       - name: Test frontend
         run: docker compose --profile dev run --rm --no-deps frontend-dev npm test -- --watch=false --runInBand
       - name: Clean up containers
