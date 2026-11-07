@@ -17,6 +17,10 @@ Usage:
     python run_e2e.py --config conditions.toml --device desktop-chrome android-chrome iphone-safari
 """
 
+# CLI output, deterministic shuffling, and recording individual trial failures
+# are intentional for this benchmark.
+# ruff: noqa: T201, S311, BLE001
+
 # Flat benchmark scripts: each measurement step keeps its parameters and
 # intermediate timings together, and both runners share the same CSV schema.
 # pylint: disable=too-many-arguments,too-many-positional-arguments

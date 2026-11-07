@@ -13,6 +13,10 @@ Usage:
     python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
 """
 
+# CLI output, deterministic shuffling, and recording individual request failures
+# are intentional for this benchmark.
+# ruff: noqa: T201, S311, BLE001
+
 # Flat benchmark scripts: each measurement step keeps its parameters and
 # intermediate timings together, and both runners share the same CSV schema.
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -91,7 +95,7 @@ async def simple_chat_request(
     sio = socketio.AsyncClient(reconnection=False)
 
     @sio.on("*")
-    async def _any(event, data=None):  # noqa: ANN001
+    async def _any(event, data=None):
         events.put_nowait((time.perf_counter(), event, data))
 
     deadline = time.perf_counter() + timeout
@@ -102,7 +106,7 @@ async def simple_chat_request(
             raise RequestError("timeout")
         try:
             return await asyncio.wait_for(events.get(), remaining)
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise RequestError("timeout") from e
 
     t_setup0 = time.perf_counter()
@@ -302,7 +306,7 @@ async def direct_request(
 
     try:
         result = await asyncio.wait_for(run(), timeout)
-    except asyncio.TimeoutError as e:
+    except TimeoutError as e:
         raise RequestError("timeout") from e
     return {"setup_s": None, "status": "ok", "error": "", **result}
 

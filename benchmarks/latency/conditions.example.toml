@@ -19,22 +19,22 @@ system_message = "You are a helpful assistant. Follow the requested answer lengt
 # - direct_model: model name for the direct-to-provider baseline (defaults to model)
 
 [[conditions]]
-name = "openai-gpt-5.5"
+name = "openai-gpt-5.1"
 provider = "openai"
-model = "gpt-5.5-2026-04-23"
+model = "gpt-5.1-2025-11-13"
 pid = "latency-bench-openai"
 
 [[conditions]]
-name = "azure-gpt-5.5"
+name = "azure-gpt-5.1"
 provider = "azure"
 # On Azure this is the deployment name, and the backend only accepts names in
-# backend/src/utils/configs.py, so name the deployment gpt-5.5-2026-04-23.
-model = "gpt-5.5-2026-04-23"
+# backend/src/utils/configs.py, so name the deployment gpt-5.1-2025-11-13.
+model = "gpt-5.1-2025-11-13"
 pid = "latency-bench-azure"
 
 [[conditions]]
-name = "together-llama-3.3-70b"
+name = "together-deepseek-v4.1-flash"
 provider = "together_ai"
-model = "Llama-3.3-70B-Instruct-Turbo"
+model = "together_ai-deepseek-ai/DeepSeek-V4.1-Flash"
 pid = "latency-bench-together"
-direct_model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+direct_model = "deepseek-ai/DeepSeek-V4.1-Flash"

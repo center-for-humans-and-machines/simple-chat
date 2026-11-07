@@ -1,5 +1,8 @@
 """Shared helpers for the Simple Chat latency benchmark scripts."""
 
+# RowWriter keeps its file open across requests and closes it explicitly.
+# ruff: noqa: SIM115
+
 from __future__ import annotations
 
 import csv
@@ -9,7 +12,7 @@ import socket
 import tomllib
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -91,12 +94,12 @@ def parse_stream_modes(values: list[str]) -> list[bool]:
 
 
 def new_run_id(mode: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{mode}-{stamp}-{uuid.uuid4().hex[:6]}"
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
 def client_host() -> str:
@@ -110,7 +113,6 @@ class RowWriter:
     def __init__(self, path: Path, fieldnames: list[str]):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
-        # The file stays open across write() calls until close().
         # pylint: disable-next=consider-using-with
         self._file = open(path, "w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(

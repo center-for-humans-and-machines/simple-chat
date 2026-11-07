@@ -4,6 +4,9 @@ Usage:
     python setup_projects.py --config conditions.toml
 """
 
+# This command-line script reports project setup on stdout.
+# ruff: noqa: T201
+
 from __future__ import annotations
 
 import argparse

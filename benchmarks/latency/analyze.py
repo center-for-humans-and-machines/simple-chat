@@ -11,6 +11,9 @@ Usage:
     python analyze.py data/raw/backend-*.csv data/raw/direct-*.csv
 """
 
+# This command-line script reports generated paths on stdout.
+# ruff: noqa: T201
+
 # plot() lays out one figure step by step.
 # pylint: disable=too-many-locals
 
@@ -93,8 +96,8 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
     if data.is_empty():
         print("no backend/direct rows to plot")
         return
-    conditions = data["condition"].unique(maintain_order=True).sort().to_list()
-    levels = sorted(data["concurrency"].unique().to_list())
+    conditions = sorted(set(data["condition"].to_list()))
+    levels = sorted(set(data["concurrency"].to_list()))
     rows = [("ttft_s", "Time to first token (s)"), ("total_s", "Full completion (s)")]
 
     plt.rcParams.update(
@@ -138,7 +141,10 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                     ax.errorbar(
                         xs,
                         p50,
-                        yerr=[[0] * len(p50), [b - a for a, b in zip(p50, p95)]],
+                        yerr=[
+                            [0] * len(p50),
+                            [b - a for a, b in zip(p50, p95, strict=True)],
+                        ],
                         color=color,
                         lw=2,
                         marker="o",
