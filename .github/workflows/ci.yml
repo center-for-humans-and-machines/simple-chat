@@ -71,7 +71,7 @@ jobs:
       - name: Create local test configuration
         run: bash .github/scripts/prepare-ci-env.sh
       - name: Start production stack
-        run: docker compose --profile prod up --build --wait --detach
+        run: docker compose --profile prod up --build --wait --wait-timeout 120 --detach
       - name: Check HTTP responses
         run: |
           curl --fail --show-error http://localhost:8000/health
