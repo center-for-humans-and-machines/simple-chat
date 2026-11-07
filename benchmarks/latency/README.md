@@ -7,17 +7,17 @@ ones cited in the Simple Chat paper.
 
 ## What Is Measured
 
-| Script            | Path measured                                    | Main metrics                                     |
-| ----------------- | ------------------------------------------------ | ------------------------------------------------ |
-| `run_backend.py`  | Client → Simple Chat backend (Socket.IO) → LLM   | `ttft_s`, `total_s` under 1 / 5 / 20 sessions    |
-| `run_backend.py --mode direct` | Client → LLM provider API, no Simple Chat | Same, as a baseline for Simple Chat's overhead |
-| `run_e2e.py`      | Browser → frontend in an iframe → backend → LLM  | Network and on-screen times per device/browser   |
+| Script                         | Path measured                                   | Main metrics                                   |
+| ------------------------------ | ----------------------------------------------- | ---------------------------------------------- |
+| `run_backend.py`               | Client → Simple Chat backend (Socket.IO) → LLM  | `ttft_s`, `total_s` under 1 / 5 / 20 sessions  |
+| `run_backend.py --mode direct` | Client → LLM provider API, no Simple Chat       | Same, as a baseline for Simple Chat's overhead |
+| `run_e2e.py`                   | Browser → frontend in an iframe → backend → LLM | Network and on-screen times per device/browser |
 
 - `ttfe_s`: time to the first assistant event (OpenAI's first chunk carries only the role)
 - `ttft_s`: time to the first chunk with text (time to first token)
 - `total_s`: time until the reply is complete (`message_end` event)
 - `setup_s`: time from connecting (or loading the page) until the chat is ready
-- `ttft_render_s` / `total_render_s` (e2e only): first and last character on screen.
+- `ttft_render_s` / `total_render_s` (end-to-end only): first and last character on screen.
   The frontend types replies out at 20 ms per character, so on-screen completion
   is mostly the length of the reply times 20 ms, whatever the network does.
 
