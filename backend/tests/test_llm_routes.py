@@ -20,7 +20,7 @@ def provider(monkeypatch):
         completion_tokens = kwargs.get("max_tokens", 50)
         return SimpleNamespace(
             usage=SimpleNamespace(
-                prompt_tokens=llm.estimate_prompt_tokens(kwargs["messages"]),
+                prompt_tokens=llm.estimate_prompt_tokens(kwargs["messages"], kwargs["model"]),
                 completion_tokens=completion_tokens,
             ),
             choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
@@ -107,3 +107,23 @@ async def test_call_without_a_cap_is_not_bounded(make_project, api, provider):
 
     assert response.status_code == 200
     assert "max_tokens" not in provider[0]
+
+
+async def test_image_cost_is_reserved_before_the_call(make_project, api, provider):
+    # a text-only estimate (a few tokens) would let this call through
+    project = await make_project(max_tokens_per_project=1000)
+    payload = body(project)
+    payload["chat"] = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "what is this?"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/a.jpg"}},
+            ],
+        }
+    ]
+
+    response = await api.post("/llm/call", json=payload)
+
+    assert response.status_code == 429
+    assert provider == []
