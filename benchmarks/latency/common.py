@@ -115,9 +115,7 @@ class RowWriter:
         self.path = path
         # pylint: disable-next=consider-using-with
         self._file = open(path, "w", newline="", encoding="utf-8")
-        self._writer = csv.DictWriter(
-            self._file, fieldnames=fieldnames, extrasaction="ignore"
-        )
+        self._writer = csv.DictWriter(self._file, fieldnames=fieldnames, extrasaction="ignore")
         self._writer.writeheader()
 
     def write(self, row: dict) -> None:

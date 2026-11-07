@@ -191,8 +191,7 @@ async def one_trial(
             b = await frame.evaluate("window.__bench")
             if (
                 b["last"] is not None
-                and (await frame.evaluate("performance.now()") - b["last"])
-                > render_idle * 1000
+                and (await frame.evaluate("performance.now()") - b["last"]) > render_idle * 1000
             ):
                 break
             await asyncio.sleep(0.1)
@@ -204,15 +203,9 @@ async def one_trial(
             "ttfe_s": first_event - t0 if first_event else None,
             "ttft_s": first_token - t0 if first_token else None,
             "total_s": end[0] - t0,
-            "ttft_render_s": (
-                (b["first"] - b["t0"]) / 1000 if b["first"] and b["t0"] else None
-            ),
-            "total_render_s": (
-                (b["last"] - b["t0"]) / 1000 if b["last"] and b["t0"] else None
-            ),
-            "response_chars": sum(
-                len(f[2]["data"].get("content") or "") for f in chunks
-            ),
+            "ttft_render_s": ((b["first"] - b["t0"]) / 1000 if b["first"] and b["t0"] else None),
+            "total_render_s": ((b["last"] - b["t0"]) / 1000 if b["last"] and b["t0"] else None),
+            "response_chars": sum(len(f[2]["data"].get("content") or "") for f in chunks),
             "status": status,
             "error": "" if status == "ok" else "backend reported an error",
         }
@@ -248,9 +241,7 @@ async def main_async(args) -> None:
                     (c, s, rep, p)
                     for c in conditions
                     for s in streams
-                    for rep, p in common.prompt_schedule(
-                        prompts, args.reps, args.trials
-                    )
+                    for rep, p in common.prompt_schedule(prompts, args.reps, args.trials)
                 ]
                 random.Random(f"{args.seed}-{device}").shuffle(trials)
                 # One warm-up trial per device (page caches, TLS, backend), not analysed.
@@ -308,21 +299,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", default="conditions.toml")
     parser.add_argument("--prompts", default="prompts.jsonl")
-    parser.add_argument(
-        "--prompt-ids", nargs="*", help="subset of prompt IDs (default: all)"
-    )
-    parser.add_argument(
-        "--conditions", nargs="*", help="subset of condition names (default: all)"
-    )
+    parser.add_argument("--prompt-ids", nargs="*", help="subset of prompt IDs (default: all)")
+    parser.add_argument("--conditions", nargs="*", help="subset of condition names (default: all)")
     parser.add_argument(
         "--device",
         nargs="+",
         default=["desktop-chrome", "android-chrome"],
         choices=sorted(DEVICES),
     )
-    parser.add_argument(
-        "--stream", nargs="+", default=["on", "off"], help="on and/or off"
-    )
+    parser.add_argument("--stream", nargs="+", default=["on", "off"], help="on and/or off")
     parser.add_argument("--reps", type=int, default=2)
     parser.add_argument(
         "--trials",

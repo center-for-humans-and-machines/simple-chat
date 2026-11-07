@@ -218,8 +218,7 @@ def make_direct_client(cond: common.Condition):
         if api_version == "v1":
             return AsyncOpenAI(
                 api_key=os.environ["AZURE_OPENAI_API_KEY"],
-                base_url=os.environ["AZURE_OPENAI_BASE_URL"].rstrip("/")
-                + "/openai/v1/",
+                base_url=os.environ["AZURE_OPENAI_BASE_URL"].rstrip("/") + "/openai/v1/",
             )
         return AsyncAzureOpenAI(
             api_key=os.environ["AZURE_OPENAI_API_KEY"],
@@ -242,9 +241,7 @@ def request_params(cond: common.Condition) -> dict:
     if cond.provider == "together_ai":
         effort = os.environ.get("TOGETHER_AI_REASONING_EFFORT")
         params = {"temperature": 0.7}
-        return (
-            {**params, "extra_body": {"reasoning_effort": effort}} if effort else params
-        )
+        return {**params, "extra_body": {"reasoning_effort": effort}} if effort else params
     if not is_reasoning_model(cond.direct_model):
         return {"temperature": 0.7}
     effort = os.environ.get("OPENAI_REASONING_EFFORT")
@@ -316,9 +313,7 @@ async def direct_request(
 # --------------------------------------------------------------------------------------
 
 
-async def run_block(
-    args, config, cond, stream, concurrency, prompts, writer, run_id, block
-):
+async def run_block(args, config, cond, stream, concurrency, prompts, writer, run_id, block):
     jobs: asyncio.Queue[Job] = asyncio.Queue()
     # One warm-up request per worker (flagged, excluded from the analysis), then the
     # measured requests in a shuffled order.
@@ -326,9 +321,7 @@ async def run_block(
         jobs.put_nowait(Job(rep=-1, prompt=prompts[i % len(prompts)], warmup=True))
     measured = [
         Job(rep, p, False)
-        for rep, p in common.prompt_schedule(
-            prompts, args.reps, args.requests_per_block
-        )
+        for rep, p in common.prompt_schedule(prompts, args.reps, args.requests_per_block)
     ]
     random.Random(f"{args.seed}-{block}").shuffle(measured)
     for job in measured:
@@ -365,9 +358,7 @@ async def run_block(
             }
             try:
                 if args.mode == "backend":
-                    participant_id = (
-                        f"{run_id}-b{block}-w{worker_id}-{job.prompt['id']}-r{job.rep}"
-                    )
+                    participant_id = f"{run_id}-b{block}-w{worker_id}-{job.prompt['id']}-r{job.rep}"
                     result = await simple_chat_request(
                         config,
                         cond,
@@ -428,9 +419,7 @@ async def main_async(args) -> None:
                 f"  block {i + 1}/{len(blocks)}: {cond.name} stream={'on' if stream else 'off'} "
                 f"concurrency={concurrency}"
             )
-            await run_block(
-                args, config, cond, stream, concurrency, prompts, writer, run_id, i
-            )
+            await run_block(args, config, cond, stream, concurrency, prompts, writer, run_id, i)
             if args.pause and i < len(blocks) - 1:
                 await asyncio.sleep(args.pause)
     finally:
@@ -448,12 +437,8 @@ def main() -> None:
         default="backend",
         help="backend: through Simple Chat; direct: straight to the provider",
     )
-    parser.add_argument(
-        "--conditions", nargs="*", help="subset of condition names (default: all)"
-    )
-    parser.add_argument(
-        "--stream", nargs="+", default=["on", "off"], help="on and/or off"
-    )
+    parser.add_argument("--conditions", nargs="*", help="subset of condition names (default: all)")
+    parser.add_argument("--stream", nargs="+", default=["on", "off"], help="on and/or off")
     parser.add_argument("--concurrency", nargs="+", type=int, default=[1, 5, 20])
     parser.add_argument(
         "--reps", type=int, default=3, help="repetitions of the prompt set per block"
@@ -464,14 +449,10 @@ def main() -> None:
         help="exact number of measured requests per block, cycling through the "
         "prompts (overrides --reps)",
     )
-    parser.add_argument(
-        "--timeout", type=float, default=120, help="seconds per request"
-    )
+    parser.add_argument("--timeout", type=float, default=120, help="seconds per request")
     parser.add_argument("--pause", type=float, default=5, help="seconds between blocks")
     parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument(
-        "--env-file", help="dotenv file with provider keys (for --mode direct)"
-    )
+    parser.add_argument("--env-file", help="dotenv file with provider keys (for --mode direct)")
     parser.add_argument("--out", help="output CSV (default: data/raw/<run_id>.csv)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

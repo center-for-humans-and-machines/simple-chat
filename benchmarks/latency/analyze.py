@@ -81,11 +81,7 @@ def overhead(summary: pl.DataFrame) -> pl.DataFrame:
         return pl.DataFrame()
     joined = backend.join(direct, on=keys, suffix="_direct")
     return joined.select(
-        keys
-        + [
-            (pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}")
-            for c in cols
-        ]
+        keys + [(pl.col(c) - pl.col(f"{c}_direct")).round(3).alias(f"overhead_{c}") for c in cols]
     ).sort(keys)
 
 
@@ -124,9 +120,9 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
     for col, cond in enumerate(conditions):
         for row, (metric, label) in enumerate(rows):
             ax = axes[row][col]
-            for (mode, stream), part in data.filter(
-                pl.col("condition") == cond
-            ).group_by(["mode", "stream"], maintain_order=True):
+            for (mode, stream), part in data.filter(pl.col("condition") == cond).group_by(
+                ["mode", "stream"], maintain_order=True
+            ):
                 part = part.sort("concurrency")
                 xs = [x_of[c] for c in part["concurrency"]]
                 p50, p95 = (
@@ -169,12 +165,8 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
                     )
             ax.set_xticks(range(len(levels)), [str(lvl) for lvl in levels])
             # Shared y-axis per row: fit the largest p95 in the row so no whisker is cut.
-            row_cols = [
-                c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns
-            ]
-            row_max = max(
-                data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1
-            )
+            row_cols = [c for c in (f"{metric}_p95", f"{metric}_p50") if c in data.columns]
+            row_max = max(data.select(pl.max_horizontal(row_cols).max()).item() or 0, 0.1)
             ax.set_ylim(0, row_max * 1.08)
             ax.grid(axis="y", color=GRID, lw=0.8)
             ax.set_axisbelow(True)
@@ -238,9 +230,7 @@ def plot(summary: pl.DataFrame, out_stem: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)"
-    )
+    parser.add_argument("files", nargs="*", type=Path, help="raw CSVs (default: data/raw/*.csv)")
     parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR)
     args = parser.parse_args()
 
