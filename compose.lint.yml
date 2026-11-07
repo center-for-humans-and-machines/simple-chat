@@ -1,6 +1,8 @@
 services:
   super-linter:
     image: ghcr.io/super-linter/super-linter:v8
+    # Remember to update the variables from the original workflow in
+    # .github/workflows/super-linter.yml
     environment:
       - RUN_LOCAL=true
       - VALIDATE_ALL_CODEBASE=true
