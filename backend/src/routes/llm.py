@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from src.models.models import LlmCall, Project
 from src.utils.helpers import get_openai_backend
 from src.utils.limits import reserve_tokens, settle_tokens
-from src.utils.llm_model import (completion_with_backoff, init_model_endpoint,
-                                 num_tokens_from_string)
+from src.utils.llm_model import (completion_with_backoff,
+                                 estimate_prompt_tokens, init_model_endpoint)
 from src.utils.logging import setup_logger
 from src.utils.usage import record_response_usage
 
@@ -25,35 +25,15 @@ class LlmCallInput(BaseModel):
     chat: List[Dict[str, Any]]
 
 
-# tokens a provider adds per message and per reply, and a generous count per image
-MESSAGE_OVERHEAD_TOKENS = 4
-REPLY_OVERHEAD_TOKENS = 3
-IMAGE_TOKENS = 1105
-
-
-def estimate_prompt_tokens(messages: list, extra: str = "") -> int:
-    tokens = REPLY_OVERHEAD_TOKENS + num_tokens_from_string(extra)
-    for message in messages:
-        tokens += MESSAGE_OVERHEAD_TOKENS
-        content = message.get("content") or ""
-        if isinstance(content, list):
-            for part in content:
-                if part.get("type") == "text":
-                    tokens += num_tokens_from_string(part.get("text", ""))
-                elif part.get("type") == "image_url":
-                    tokens += IMAGE_TOKENS
-        else:
-            tokens += num_tokens_from_string(str(content))
-    return tokens
-
-
-async def call_within_token_cap(project: Project, messages: list, call, extra_prompt: str = ""):
+async def call_within_token_cap(
+    project: Project, model: str, messages: list, call, extra_prompt: str = ""
+):
     """Run a non-streaming completion within the project's token cap.
 
     `call` gets the completion kwargs that bound the reply (max_tokens) and returns the response.
     """
     reservation, reason = await reserve_tokens(
-        project, estimate_prompt_tokens(messages, extra_prompt)
+        project, estimate_prompt_tokens(messages, model, extra_prompt)
     )
     if reason:
         raise HTTPException(status_code=429, detail="project token limit reached")
@@ -108,6 +88,7 @@ async def send_message(data: LlmCallInput):
 
     response = await call_within_token_cap(
         project[0],
+        data.model,
         data.chat,
         lambda **kwargs: call_llm_model(
             model=data.model, messages=data.chat, project_id=data.project_id, **kwargs
@@ -145,6 +126,7 @@ async def send_message(data: LlmCallInput):
 
     response = await call_within_token_cap(
         project[0],
+        data.model,
         data.chat,
         lambda **kwargs: call_llm_model(
             model=data.model,
@@ -211,6 +193,7 @@ async def function_call(data: LlmFunctionCallInput):
 
     response = await call_within_token_cap(
         project[0],
+        "gpt-4o-mini",
         data.chat,
         lambda **kwargs: function_call_llm_model(
             messages=data.chat, project_id=data.project_id, function=data.function, **kwargs
