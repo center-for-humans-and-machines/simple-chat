@@ -12,6 +12,10 @@ COPY . /usr/src/app
 # Install dependencies
 RUN npm install --include=dev
 
+# Build-time settings, passed by compose.yml for the production profile
+ARG REACT_APP_BACKEND_URL
+ARG REACT_APP_BACKEND_SOCKET_URL
+ARG REACT_APP_FRONTEND_URL
 RUN npm run build
 
 RUN ls -la /usr/src/app

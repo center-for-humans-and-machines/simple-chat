@@ -1,32 +1,27 @@
 # Deployment
 
-This step assumes that the frontend and backend `.env` files have already been created as described in the [readme](../readme.md#requirements). The backend `.env` file requires access to object storage for image uploads. Options for object storage include Amazon S3 and MinIO. The following guide uses terminology of [software engineering environments](https://dev.to/flippedcoding/difference-between-development-stage-and-production-d0p)—the different stages where code is built, tested, and deployed, such as development and production.
+Simple Chat runs with [Docker Compose](../compose.yml). All settings are read from a single `.env` file in the repository root, created from [`env.example`](../env.example). The commands for a local run and for a production run on a single server are in the [readme](../readme.md#quick-start-local).
 
 **First-time local installation tutorial:**
 
 [![Watch the video](https://img.youtube.com/vi/M8G7-EQHCxc/hqdefault.jpg)](https://youtu.be/M8G7-EQHCxc)
 
-## Docker Compose
+## Profiles
 
-Simple Chat includes a Docker Compose file for local development. It offers two profiles: development and production. The development profile supports hot reloading for the frontend and volume mounting, which are disabled in the production profile. Health checks on the modular components ensure transparent error logging.
+The Compose file offers two profiles. Both start the backend and a MongoDB database.
 
-## Commands
+| Profile | Command                                              | Chat frontend           | Dashboard               | Use                                     |
+| ------- | ---------------------------------------------------- | ----------------------- | ----------------------- | --------------------------------------- |
+| `dev`   | `docker compose --profile dev up --build`            | <http://localhost:1234> | <http://localhost:3001> | Local testing and development           |
+| `prod`  | `docker compose --profile prod up --build --detach`  | port 8080               | port 8081               | Running a study on a server             |
 
-[Docker Compose](../compose.yml) runs the application. Run the commands below from the root directory of the project.
-
-| Action                                        | Development                                        | Production                                          |
-| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
-| Build and start                               | `docker compose --profile dev up --build --detach` | `docker compose --profile prod up --build --detach` |
-| Stop                                          | `docker compose --profile dev stop`                | `docker compose --profile prod stop`                |
-| Stop and remove (local database data is lost) | `docker compose --profile dev down --volumes`      | `docker compose --profile prod down --volumes`      |
-
-The development frontend is accessible on localhost:1234 and the dashboard on localhost:3001. The production profile builds the React projects and serves them with nginx; the frontend is accessible on localhost:8080 and the dashboard on localhost:8081.
+The `dev` profile serves the frontend and dashboard with hot reloading from the mounted source code. The `prod` profile builds them once and serves the static files with nginx. The backend listens on port 8000 in both profiles. Health checks on the components make errors visible in `docker compose logs`.
 
 ## Production
 
-Dockerfiles for [frontend](../frontend/Dockerfile) and [backend](../backend/Dockerfile) are used to build the application images for production.
+The production frontend and dashboard are built into the Docker images, so the browser-facing URLs must be known at build time. Set `CHAT_URL` and `BACKEND_URL` in `.env` and rebuild with `--build` after changing them. Survey platforms are served over HTTPS and only embed HTTPS pages, so put a reverse proxy with TLS in front of ports 8080, 8081 and 8000, as shown in the [readme](../readme.md#production-single-server).
 
-The variable `REACT_APP_BACKEND_URL` in the production environment cannot be specified in the [compose.yml](../compose.yml) file because the production Docker image already contains the built frontend code. Instead, it should be set in the `.env` file of the frontend before building the Docker image.
+Image uploads by participants require object storage, such as Amazon S3 or MinIO, configured with the `S3_*` variables.
 
 ## Application and LLM Observability
 
