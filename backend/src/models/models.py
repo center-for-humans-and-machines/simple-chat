@@ -99,3 +99,15 @@ class RateLimitWindow(Document):
             ),
             pymongo.IndexModel([("expires_at", pymongo.ASCENDING)], expireAfterSeconds=0),
         ]
+
+
+class Researcher(Document):
+    """A researcher who logs in to the dashboard with email and password."""
+
+    email: str
+    # see src/utils/auth.py hash_password
+    password_hash: str
+    created_at: str
+
+    class Settings:
+        indexes = [pymongo.IndexModel([("email", pymongo.ASCENDING)], unique=True)]

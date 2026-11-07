@@ -36,4 +36,4 @@ See the [oTree example](https://github.com/center-for-humans-and-machines/simple
 
 The dashboard is built with [React](https://react.dev/). Every researcher can directly download conversations, edit system messages, and search in conversations in the admin dashboard.
 
-To log into the dashboard, enter your email and project ID. The project ID should be one of the project IDs which is created by your email address before.
+To log into the dashboard, enter your email and the password the admin set when creating your first project.

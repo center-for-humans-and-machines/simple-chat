@@ -16,7 +16,7 @@ import { AuthContext } from "../contexts/AuthContext";
 export default function LoginPage() {
   const navigator = useNavigate();
   const [email, setEmail] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
 
@@ -29,12 +29,13 @@ export default function LoginPage() {
     try {
       let backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(
-        `${backendURL}/dashboard/login/${email}/${projectId}`
-      );
+      const response = await fetch(`${backendURL}/dashboard/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
 
       if (!response.ok) {
-        setError("Project not found OR Email is wrong.");
         throw new Error("Login failed");
       }
 
@@ -55,11 +56,12 @@ export default function LoginPage() {
       }
 
       window.localStorage.setItem("email", email);
+      window.localStorage.setItem("token", data.token);
       navigator("/");
       // You can save a token or user data in context/localStorage here
     } catch (error) {
       console.error("Error logging in:", error.message);
-      setError("Project not found or Email is wrong.");
+      setError("Email or password is wrong.");
     }
   };
 
@@ -99,10 +101,11 @@ export default function LoginPage() {
               margin="normal"
               required
               fullWidth
-              label="Project ID (admin: password)"
-              type="text"
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
             />
             {error && <Typography color="error">{error}</Typography>}
 

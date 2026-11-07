@@ -25,6 +25,7 @@ import {
   formatCost
 } from "../components/UsageTables";
 import { WithInfo } from "../components/InfoButton";
+import { authFetch } from "../authHeaders";
 
 const limitFields = [
   {
@@ -176,7 +177,7 @@ function UsagePage() {
   useEffect(() => {
     const getUsage = async () => {
       try {
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/usage/${project_id}`
         );
 
@@ -193,7 +194,7 @@ function UsagePage() {
 
     const getLimits = async () => {
       try {
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/limits/${project_id}`
         );
 
@@ -226,7 +227,7 @@ function UsagePage() {
   const saveLimits = async () => {
     setSaving(true);
     try {
-      const response = await fetch(
+      const response = await authFetch(
         `${backendURL}/dashboard/limits/${project_id}`,
         {
           method: "PUT",
