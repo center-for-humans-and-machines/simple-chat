@@ -1,0 +1,4 @@
+# Black settings for Super-linter (PYTHON_BLACK_CONFIG_FILE default).
+# Same line length as .ruff.toml and .pylintrc (max-line-length=100).
+[tool.black]
+line-length = 100
