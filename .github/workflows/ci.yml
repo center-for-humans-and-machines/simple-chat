@@ -29,6 +29,13 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Install shfmt
         run: sudo apt-get update && sudo apt-get install --yes shfmt
+      - name: Install hadolint
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/hadolint" \
+            https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64
+          echo "6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47  $RUNNER_TEMP/hadolint" | sha256sum --check
+          sudo install -m 755 "$RUNNER_TEMP/hadolint" /usr/local/bin/hadolint
       - name: Run pre-commit
         run: uvx pre-commit@4.7.0 run --all-files --show-diff-on-failure
 
