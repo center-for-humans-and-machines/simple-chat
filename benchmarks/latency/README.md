@@ -94,10 +94,9 @@ combines all of them into:
   against concurrent sessions
 - `results/latency-e2e.png` and `.pdf`: first and last character on screen in the
   browser against concurrent sessions, per device, next to the direct baseline
-- `results/latency-paper.pdf` and `.png`: the figure in the paper. Panel a shows the
-  time until the first text is visible (median and interquartile range, Simple Chat
-  on screen vs direct API); panel b splits the median time until the full reply is
-  visible into provider API, Simple Chat + browser, and display animation
+- `results/latency-paper.pdf` and `.png`: the figure in the paper, the time until the
+  first text is visible (median and interquartile range, Simple Chat on screen vs
+  direct API), drawn at print size and cropped to its content
 
 `analyze.py` compares Simple Chat runs only with direct runs from the same day
 (`date` column), so provider load is similar on both sides.
