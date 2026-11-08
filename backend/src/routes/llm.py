@@ -1,4 +1,5 @@
 # routes.py
+import json
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -6,8 +7,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from src.models.models import LlmCall, Project
 from src.utils.helpers import get_openai_backend
-from src.utils.llm_model import completion_with_backoff, init_model_endpoint
+from src.utils.limits import reserve_tokens, settle_tokens
+from src.utils.llm_model import (completion_with_backoff,
+                                 estimate_prompt_tokens, init_model_endpoint)
 from src.utils.logging import setup_logger
+from src.utils.usage import record_response_usage
 
 logger = setup_logger(__name__)
 
@@ -21,7 +25,36 @@ class LlmCallInput(BaseModel):
     chat: List[Dict[str, Any]]
 
 
-async def call_llm_model(model: str, messages: list, project_id: str):
+async def call_within_token_cap(
+    project: Project, model: str, messages: list, call, extra_prompt: str = ""
+):
+    """Run a non-streaming completion within the project's token cap.
+
+    `call` gets the completion kwargs that bound the reply (max_tokens) and returns the response.
+    """
+    reservation, reason = await reserve_tokens(
+        project, estimate_prompt_tokens(messages, model, extra_prompt)
+    )
+    if reason:
+        raise HTTPException(status_code=429, detail="project token limit reached")
+
+    kwargs = {}
+    if reservation.max_tokens is not None:
+        kwargs["max_tokens"] = reservation.max_tokens
+
+    used = 0
+    try:
+        response = await call(**kwargs)
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            used = usage.prompt_tokens + usage.completion_tokens
+        return response
+    finally:
+        # keep the budget equal to the recorded usage
+        await settle_tokens(reservation, used)
+
+
+async def call_llm_model(model: str, messages: list, project_id: str, **kwargs):
     openai_backend = await get_openai_backend(project_id)
     client = init_model_endpoint(model, openai_backend)
 
@@ -31,6 +64,7 @@ async def call_llm_model(model: str, messages: list, project_id: str):
         messages=messages,
         temperature=0.7,
         stream=False,
+        **kwargs,
     )
 
     return response
@@ -52,8 +86,13 @@ async def send_message(data: LlmCallInput):
     if data.requested_by != project[0].created_by:
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
-    response = await call_llm_model(
-        model=data.model, messages=data.chat, project_id=data.project_id
+    response = await call_within_token_cap(
+        project[0],
+        data.model,
+        data.chat,
+        lambda **kwargs: call_llm_model(
+            model=data.model, messages=data.chat, project_id=data.project_id, **kwargs
+        ),
     )
 
     new_llm_call = LlmCall(
@@ -64,6 +103,7 @@ async def send_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -84,11 +124,17 @@ async def send_json_message(data: LlmCallInput):
     if data.requested_by != project[0].created_by:
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
-    response = await call_llm_model(
-        model=data.model,
-        messages=data.chat,
-        project_id=data.project_id,
-        response_format={"type": "json_object"},
+    response = await call_within_token_cap(
+        project[0],
+        data.model,
+        data.chat,
+        lambda **kwargs: call_llm_model(
+            model=data.model,
+            messages=data.chat,
+            project_id=data.project_id,
+            response_format={"type": "json_object"},
+            **kwargs,
+        ),
     )
 
     new_llm_call = LlmCall(
@@ -99,6 +145,7 @@ async def send_json_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -110,7 +157,7 @@ class LlmFunctionCallInput(BaseModel):
     function: dict
 
 
-async def function_call_llm_model(messages: list, project_id: str, function):
+async def function_call_llm_model(messages: list, project_id: str, function, **kwargs):
     openai_backend = await get_openai_backend(project_id)
     client = init_model_endpoint("gpt-4o-mini", openai_backend)
 
@@ -122,6 +169,7 @@ async def function_call_llm_model(messages: list, project_id: str, function):
         stream=False,
         tools=[{"type": "function", "function": function}],
         tool_choice={"type": "function", "function": {"name": function["name"]}},
+        **kwargs,
     )
 
     return response
@@ -143,8 +191,14 @@ async def function_call(data: LlmFunctionCallInput):
     if data.requested_by != project[0].created_by:
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
-    response = await function_call_llm_model(
-        messages=data.chat, project_id=data.project_id, function=data.function
+    response = await call_within_token_cap(
+        project[0],
+        "gpt-4o-mini",
+        data.chat,
+        lambda **kwargs: function_call_llm_model(
+            messages=data.chat, project_id=data.project_id, function=data.function, **kwargs
+        ),
+        extra_prompt=json.dumps(data.function),
     )
 
     new_llm_call = LlmCall(
@@ -155,5 +209,6 @@ async def function_call(data: LlmFunctionCallInput):
     )
 
     await new_llm_call.insert()
+    await record_response_usage(data.project_id, "gpt-4o-mini", response, source="llm_api")
 
     return response.choices

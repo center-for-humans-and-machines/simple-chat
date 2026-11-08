@@ -3,12 +3,14 @@ import { Typography, Container, Box, Paper, Button } from "@mui/material";
 // import { AuthContext } from "../contexts/AuthContext";
 import { useParams } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
+import { UsageStats, UsageByModelTable } from "../components/UsageTables";
 
 function ConversationPage() {
   const { project_id, conversation_id } = useParams();
   // const { authData, setAuthData } = useContext(AuthContext);
   const [conversationId, setConversationId] = useState();
   const [conversationInfo, setConversationInfo] = useState();
+  const [conversationUsage, setConversationUsage] = useState();
 
   const downloadConverstionJSON = () => {
     const json = JSON.stringify(conversationInfo, null, 2);
@@ -49,8 +51,27 @@ function ConversationPage() {
       }
     };
 
+    const getConversationUsage = async local_conversation_id => {
+      try {
+        let backendURL =
+          process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+        const response = await fetch(
+          `${backendURL}/dashboard/usage/${project_id}/conversation/${local_conversation_id}`
+        );
+
+        if (!response.ok) {
+          throw new Error("failure!");
+        }
+
+        setConversationUsage(await response.json());
+      } catch (error) {
+        console.error("Error getting usage:", error.message);
+      }
+    };
+
     getConversationId();
-  }, [conversation_id]);
+    getConversationUsage(conversation_id);
+  }, [project_id, conversation_id]);
 
   const JsonSnippet = ({ data }) => {
     return (
@@ -94,6 +115,15 @@ function ConversationPage() {
       <Container maxWidth="md">
         <Typography variant="h4" gutterBottom sx={{ mt: 0 }}>
           Conversation "{conversationId}"
+        </Typography>
+
+        <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+          Token usage
+        </Typography>
+        <UsageStats total={conversationUsage?.total} />
+        <UsageByModelTable rows={conversationUsage?.by_model || []} />
+
+        <Box>
           <Button
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
@@ -102,7 +132,7 @@ function ConversationPage() {
             Download Conversation as JSON
           </Button>
           <JsonSnippet data={conversationInfo} />
-        </Typography>
+        </Box>
       </Container>
     </>
   );
