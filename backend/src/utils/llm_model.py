@@ -3,10 +3,10 @@ from typing import List, Optional
 import requests
 import tiktoken
 # Note: The openai-python library support for Azure OpenAI is in preview.
-from openai import AsyncAzureOpenAI, AsyncOpenAI, OpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from src.models.message import OpenAIMessage
 from src.models.settings import get_settings
-from src.utils.configs import models
+from src.utils.configs import is_reasoning_model, models
 from src.utils.db import create_message
 from src.utils.logging import setup_logger
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -40,12 +40,31 @@ else:
 async def completion_with_backoff(client, **kwargs):
     # logger.info("here in completion_with_backoff")
     # return await client.chat.completions.create(**kwargs)
+    if is_reasoning_model(kwargs["model"]):
+        # Reasoning models reject `temperature`; they only use their default sampling.
+        kwargs.pop("temperature", None)
+        if settings.openai_reasoning_effort:
+            # Sent as extra_body because the pinned openai SDK predates this parameter.
+            kwargs["extra_body"] = {
+                **kwargs.get("extra_body", {}),
+                "reasoning_effort": settings.openai_reasoning_effort,
+            }
+    if (
+        f"together_ai-{kwargs['model']}" in models["together_ai"]
+        and settings.together_ai_reasoning_effort
+    ):
+        # Hybrid open-weights models (e.g. DeepSeek-V4.1-Flash) think by default;
+        # "none" switches thinking off.
+        kwargs["extra_body"] = {
+            **kwargs.get("extra_body", {}),
+            "reasoning_effort": settings.together_ai_reasoning_effort,
+        }
+    # On Azure the request names a deployment, which may differ from the model name.
+    deployments = getattr(client, "azure_deployments", None)
+    if deployments:
+        kwargs["model"] = deployments.get(kwargs["model"], kwargs["model"])
     try:
-        if f"together_ai-{kwargs['model']}" in models["together_ai"]:
-            return client.chat.completions.create(**kwargs)
-
-        else:
-            return await client.chat.completions.create(**kwargs)
+        return await client.chat.completions.create(**kwargs)
 
     except Exception as e:
         logger.error("Error occurred in completion_with_backoff: %s", str(e))
@@ -84,11 +103,20 @@ def init_model_endpoint(
             logger.debug(
                 "Azure-specific base URL detected... Using AsyncAzureOpenAI client."
             )
-            client = AsyncAzureOpenAI(
-                api_key=settings.azure_openai_api_key,
-                azure_endpoint=settings.azure_openai_base_url,
-                api_version="2024-02-01",
-            )
+            if settings.azure_openai_api_version == "v1":
+                # Version-less v1 API, which Azure recommends for GPT-5 models.
+                client = AsyncOpenAI(
+                    api_key=settings.azure_openai_api_key,
+                    base_url=settings.azure_openai_base_url.rstrip("/") + "/openai/v1/",
+                )
+            else:
+                client = AsyncAzureOpenAI(
+                    api_key=settings.azure_openai_api_key,
+                    azure_endpoint=settings.azure_openai_base_url,
+                    api_version=settings.azure_openai_api_version,
+                )
+            # Map model names to deployment names (AZURE_OPENAI_DEPLOYMENTS).
+            client.azure_deployments = settings.azure_openai_deployments
         elif openai_backend.lower() == "openai":
             logger.debug(
                 "Standard OpenAI base URL detected... Using AsyncOpenAI client."
@@ -97,7 +125,9 @@ def init_model_endpoint(
         return client
 
     if model in models["together_ai"]:
-        client = OpenAI(
+        # Use the async client so a Together AI response does not block the
+        # event loop (and with it every other open chat) while it streams.
+        client = AsyncOpenAI(
             api_key=settings.together_ai_key, base_url=settings.together_ai_url
         )
         return client
@@ -118,6 +148,7 @@ async def call_model(
     session_id: str,
     experiment_id: str,
     participant_id: Optional[str] = None,
+    stream: bool = True,
 ) -> OpenAIMessage:
     model = model.replace("together_ai-", "")  # for together call
 
@@ -135,79 +166,45 @@ async def call_model(
             images_volume_total,
         )
 
+    status = "ok"
     try:
         response = await completion_with_backoff(
             client,
             model=model,
             messages=messages,
             temperature=0.7,
-            stream=True,
+            stream=stream,
         )
 
         full_response = ""
-        newMessage = True
 
-        if f"together_ai-{model}" in models["together_ai"]:
-            # model in together.ai is not working with "async for" loop
-            for chunk in response:
-                text_to_send_in_the_current_chunk = ""
-                if len(chunk.choices) > 0:
-                    full_response += chunk.choices[0].delta.content or ""
-                    text_to_send_in_the_current_chunk = (
-                        chunk.choices[0].delta.content or ""
-                    )
-
-                    if newMessage == False:
-                        response_data = {
-                            "type": "stream",
-                            "data": await create_message(
-                                content=text_to_send_in_the_current_chunk or "",
-                                role="assistant",
-                            ),
-                        }
-
-                    else:
-                        response_data = {
-                            "type": "message",
-                            "data": await create_message(
-                                content=text_to_send_in_the_current_chunk or "",
-                                role="assistant",
-                            ),
-                        }
-                        newMessage = False
-
-                    await sio_server.emit("message_to_client", response_data, sid)
-        else:
+        if stream:
+            new_message = True
             async for chunk in response:
-                text_to_send_in_the_current_chunk = ""
-                if len(chunk.choices) > 0:
-                    full_response += chunk.choices[0].delta.content or ""
-                    text_to_send_in_the_current_chunk = (
-                        chunk.choices[0].delta.content or ""
-                    )
+                if len(chunk.choices) == 0:
+                    continue
+                text_to_send_in_the_current_chunk = chunk.choices[0].delta.content or ""
+                full_response += text_to_send_in_the_current_chunk
 
-                    if newMessage == False:
-                        response_data = {
-                            "type": "stream",
-                            "data": await create_message(
-                                content=text_to_send_in_the_current_chunk or "",
-                                role="assistant",
-                            ),
-                        }
-
-                    else:
-                        response_data = {
-                            "type": "message",
-                            "data": await create_message(
-                                content=text_to_send_in_the_current_chunk or "",
-                                role="assistant",
-                            ),
-                        }
-                        newMessage = False
-
-                    await sio_server.emit("message_to_client", response_data, sid)
-
-        # logger.info(f"full_response : {full_response}")
+                response_data = {
+                    "type": "message" if new_message else "stream",
+                    "data": await create_message(
+                        content=text_to_send_in_the_current_chunk,
+                        role="assistant",
+                    ),
+                }
+                new_message = False
+                await sio_server.emit("message_to_client", response_data, sid)
+        else:
+            full_response = response.choices[0].message.content or ""
+            response_data = {
+                "type": "message",
+                "data": await create_message(
+                    content=full_response,
+                    role="assistant",
+                ),
+            }
+            await sio_server.emit("message_to_client", response_data, sid)
 
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
@@ -225,6 +222,7 @@ async def call_model(
         return full_response
 
     except Exception as e:
+        status = "error"
         response_data = {
             "type": "message",
             "data": await create_message(
@@ -235,6 +233,12 @@ async def call_model(
         await sio_server.emit("message_to_client", response_data, sid)
 
         return "ExceptionError"  # to make sure the flow of the program is not disrupted. this record will not be saved.
+
+    finally:
+        # Tell the client the assistant reply is complete (streamed or not).
+        await sio_server.emit(
+            "message_end", {"session_id": session_id, "status": status}, sid
+        )
 
 
 token_count_limit = 8000

@@ -31,25 +31,25 @@ async def login(email: str, project_id: str):
 
 
 @dashboard_router.get("/projects/{email}")
-async def list_of_projects(email: str):
+async def list_projects(email: str):
     projects = await Project.find_many({"created_by": email}).to_list()
     return projects
 
 
 @dashboard_router.get("/project/{project_id}")
-async def list_of_projects(project_id: str):
+async def get_project(project_id: str):
     projects = await Project.find_many({"project_id": project_id}).to_list()
     return projects[0]
 
 
 @dashboard_router.get("/conversations/{project_id}")
-async def list_of_conversations(project_id: str):
+async def list_conversations(project_id: str):
     conversations = await Conversations.find_many({"project_id": project_id}).to_list()
     return conversations
 
 
 @dashboard_router.get("/conversation/{conversation_id}")
-async def list_of_conversations(conversation_id: str):
+async def get_conversation(conversation_id: str):
     conversations = await Conversations.find_many(
         {"conversation_id": conversation_id}
     ).to_list()
@@ -57,7 +57,7 @@ async def list_of_conversations(conversation_id: str):
 
 
 @dashboard_router.post("/update_system_message")
-async def list_of_conversations(project_id: str = Body(...), message: str = Body(...)):
+async def update_system_message(project_id: str = Body(...), message: str = Body(...)):
     project = await Project.find_one({"project_id": project_id})
 
     if not project:
@@ -70,7 +70,7 @@ async def list_of_conversations(project_id: str = Body(...), message: str = Body
 
 
 @dashboard_router.get("/toggle_status/{project_id}/{status}")
-async def list_of_conversations(project_id: str, status: str):
+async def toggle_status(project_id: str, status: str):
     project = await Project.find_one({"project_id": project_id})
 
     if not project:
@@ -86,16 +86,16 @@ async def list_of_conversations(project_id: str, status: str):
 
 
 @dashboard_router.get("/toggle_openai_backend/{project_id}/{backend}")
-async def list_of_conversations(project_id: str, backend: str):
+async def toggle_openai_backend(project_id: str, backend: str):
     project = await Project.find_one({"project_id": project_id})
 
     if not project:
         raise HTTPException(status_code=404, detail="project not found")
 
     if backend not in ("azure", "openai"):
-        raise HTTPException(status_code=501, detail="unvalid backend")
+        raise HTTPException(status_code=501, detail="invalid backend")
 
-    project.open_ai_backend = backend
+    project.openai_backend = backend
 
     await project.save()
     return {"status": True}

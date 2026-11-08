@@ -27,7 +27,7 @@ function GridsComponent() {
         </Typography>
         <Typography variant="body1">
           In this version of material UI Grid V2 is used, the previous version
-          is depricated.
+          is deprecated.
         </Typography>
         <Typography variant="body1">
           For more details visit :{" "}
@@ -44,7 +44,7 @@ function GridsComponent() {
           In this example, the max width of the container is set for large
           screen (Like laptop). Even if the screen is larger than a laptop,
           container's width remained fix. If the this screen shows on mobile or
-          small tablets, the width of container decrease propoerly.
+          small tablets, the width of container decrease properly.
         </Typography>
 
         <Grid container spacing={2} sx={{ mt: 5, mb: 5 }}>

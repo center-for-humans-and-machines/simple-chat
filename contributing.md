@@ -16,22 +16,16 @@ Install your development environment with the following instructions:
 
 ## Usage
 
-For linting the codebase using GitHub Actions we use both [pre-commit](https://pre-commit.com/) and [super-linter](https://github.com/super-linter/super-linter). The scripts below assume you are in the root directory of the project.
+The scripts below assume you are in the root directory of the project.
 
-- Lint the code locally (runs both pre-commit and super-linter)
+- Lint the code locally with pre-commit
 
   ```sh
   ./script/lint
   ```
 
-- Lint only using pre-commit
-
-  ```sh
-  ./script/lint-precommit
-  ```
-
-- Lint only using super-linter
-
-  ```sh
-  ./script/lint-superlinter
-  ```
+CI runs `.github/workflows/ci.yml` on pull requests, `main`, and release tags.
+Its four checks are Lint, Build, Smoke test, and Tests. The smoke test starts
+the production Compose stack and checks the backend, frontend, and dashboard.
+`.github/workflows/codeql.yml` scans Python and JavaScript weekly and on PRs.
+`.github/dependabot.yml` proposes dependency updates each week.

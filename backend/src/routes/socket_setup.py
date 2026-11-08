@@ -10,7 +10,8 @@ from src.utils.db import create_image, create_message
 from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
-                               store_search_parameters, upload)
+                               parse_stream_flag, store_search_parameters,
+                               upload)
 from src.utils.llm_model import init_model_endpoint
 from src.utils.logging import setup_logger
 
@@ -138,6 +139,7 @@ async def initial_message_to_server(sid, data):
         messages=initial_messages,
         custom_system_message_id=custom_system_message_id,
         multi_rounds=current_round_number,
+        stream=parse_stream_flag(data["data"].get("stream", True)),
     )
     await new_conversation.insert()
 
@@ -173,7 +175,7 @@ async def initial_message_to_server(sid, data):
             if custom_system_message.assistant_first is True:
                 if hasattr(custom_system_message, "first_message"):
                     if len(custom_system_message.first_message) > 0:
-                        # first message should be send staticly.
+                        # first message should be send statically.
                         new_conversation_message = ConversationMessage(
                             content=custom_system_message.first_message,
                             role="assistant",
@@ -219,6 +221,7 @@ async def generate_llm_response(the_conversation, data, sio_server, sid, model):
         participant_id=the_conversation.participant_id,
         sio_server=sio_server,
         sid=sid,
+        stream=the_conversation.stream,
     )
 
     new_message = ConversationMessage(
@@ -279,6 +282,7 @@ async def text_message(sid, data):
         participant_id=the_conversation.participant_id,
         sio_server=sio_server,
         sid=sid,
+        stream=the_conversation.stream,
     )
 
     new_conversation_message = ConversationMessage(
@@ -339,6 +343,7 @@ async def image_message(sid, data):
         participant_id=the_conversation.participant_id,
         sio_server=sio_server,
         sid=sid,
+        stream=the_conversation.stream,
     )
 
     new_conversation_message = ConversationMessage(
