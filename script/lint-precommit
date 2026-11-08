@@ -9,7 +9,7 @@ set -o nounset
 # shellcheck disable=SC1091
 source utils.sh
 
-check_command poetry
+check_command pre-commit
 
 fancy_echo "Linting code with pre-commit"
-poetry run pre-commit run --all-files
+pre-commit run --all-files --show-diff-on-failure

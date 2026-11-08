@@ -1,3 +1,5 @@
+minimum_pre_commit_version: "4.0.0"
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -5,7 +7,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-      - id: check-added-large-files
+        exclude: ^kubernetes/web-service/templates/
       - id: check-toml
       - id: check-merge-conflict
 
@@ -18,72 +20,38 @@ repos:
     hooks:
       - id: shfmt
         name: shfmt
-        entry: shfmt
+        entry: shfmt -i 2 -d
         language: system
         types: [shell]
-        require_serial: true
-        args: ["-i", "2", "-w"]
-
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
-    hooks:
-      - id: markdownlint
-
-  - repo: https://github.com/pre-commit/pygrep-hooks
-    rev: v1.10.0
-    hooks:
-      - id: python-use-type-annotations
-      - id: python-no-log-warn
-
-  - repo: https://github.com/pycqa/isort
-    rev: 7.0.0
-    hooks:
-      - id: isort
-        name: isort (python)
-
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.1
-    hooks:
-      - id: pyupgrade
 
   - repo: https://github.com/hadolint/hadolint
     rev: v2.14.0
     hooks:
       - id: hadolint
 
-  - repo: https://github.com/iamthefij/docker-pre-commit
-    rev: v3.0.1
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
     hooks:
-      - id: docker-compose-check
+      - id: actionlint
 
-  # https://stackoverflow.com/a/61238571
-  - repo: local
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.31.1
     hooks:
-      - id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [python]
-        require_serial: true
-        args: ["--rcfile=.pylintrc"]
+      - id: zizmor
 
-  - repo: https://github.com/asottile/setup-cfg-fmt
-    rev: v3.1.0
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
     hooks:
-      - id: setup-cfg-fmt
+      - id: gitleaks
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
     hooks:
-      - id: prettier
+      - id: codespell
+        exclude: (^frontend/package-lock\.json$|^dashboard/package-lock\.json$)
 
-  - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: "v9.39.1"
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.3
     hooks:
-      - id: eslint
-
-  - repo: https://github.com/tcort/markdown-link-check
-    rev: "v3.14.1"
-    hooks:
-      - id: markdown-link-check
-        args: [-q]
+      - id: ruff-check
+        args: [--select, E4,E7,E9,F, --ignore, E711,E712]

@@ -1,6 +1,8 @@
 # Deployment
 
-This step assumes that the frontend and backend `.env` files have already been created as described in the [readme](../readme.md#requirements). The backend `.env` file requires access to object storage for image uploads. Options for object storage include Amazon S3 and MinIO. The following guide uses terminology of [software engineering environments](https://dev.to/flippedcoding/difference-between-development-stage-and-production-d0p)—the different stages where code is built, tested, and deployed, such as development and production.
+This step assumes that the frontend and backend `.env` files have already been created as described in the [readme](../readme.md#requirements). The backend `.env` file requires access to object storage for image uploads. Options for object storage include Amazon S3 and MinIO.
+
+The following guide uses terminology of [software engineering environments](https://dev.to/flippedcoding/difference-between-development-stage-and-production-d0p)—the different stages where code is built, tested, and deployed, such as development and production.
 
 **First-time local installation tutorial:**
 
@@ -26,7 +28,8 @@ The development frontend is accessible on localhost:1234 and the dashboard on lo
 
 Dockerfiles for [frontend](../frontend/Dockerfile) and [backend](../backend/Dockerfile) are used to build the application images for production.
 
-The variable `REACT_APP_BACKEND_URL` in the production environment cannot be specified in the [compose.yml](../compose.yml) file because the production Docker image already contains the built frontend code. Instead, it should be set in the `.env` file of the frontend before building the Docker image.
+The variable `REACT_APP_BACKEND_URL` in the production environment cannot be specified in the [compose.yml](../compose.yml) file because the production Docker image already contains the built frontend code.
+Instead, it should be set in the `.env` file of the frontend before building the Docker image.
 
 ## Application and LLM Observability
 
@@ -34,6 +37,7 @@ Two optional observability layers help to keep experiments robust:
 
 - **[Sentry](./observability/sentry.md)** provides application-level monitoring: setting `SENTRY_ENABLED=true` and supplying a valid Data Source Name (DSN) activates automatic reporting of runtime exceptions, performance issues, and user-facing errors.
 
-- **[Langfuse](./observability/langfuse.md)** adds LLM-level observability by tracing prompts, model responses, costs, latencies, and metadata such as participant IDs or experimental conditions. It thus enables fine-grained analysis of conversational behavior, error diagnosis, and reproducibility in LLM-driven experiments. Langfuse can be deployed either self-hosted or as a managed service, and it also supports version-controlled prompt management.
+- **[Langfuse](./observability/langfuse.md)** adds LLM-level observability by tracing prompts, model responses, costs, latencies, and metadata such as participant IDs or experimental conditions. It thus enables fine-grained analysis of conversational behavior, error diagnosis, and reproducibility in LLM-driven experiments.
+  Langfuse can be deployed either self-hosted or as a managed service, and it also supports version-controlled prompt management.
 
 For detailed setup instructions, see the [observability documentation](./observability/).

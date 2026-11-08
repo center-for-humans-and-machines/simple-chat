@@ -39,7 +39,7 @@ After logging in, you can view all projects associated with your email address. 
 - View project details (creation date, status, OpenAI backend, default model)
 - Copy the iframe code that embeds the chat in a survey, or open a test chat
 - View token usage and set participant limits on the **Usage & limits** page (see [Participant Limits](../readme.md#participant-limits))
-- Toggle project status between active and deactive
+- Toggle project status between active and inactive
 - Switch between OpenAI backends (OpenAI or Azure)
 - Edit the system message
 - Edit the loading message shown to participants

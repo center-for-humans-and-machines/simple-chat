@@ -108,7 +108,7 @@ async def researcher_exists(email: str, user: dict = Depends(admin_user)):
 
 
 @dashboard_router.get("/projects/{email}")
-async def list_of_projects(email: str, user: dict = Depends(current_user)):
+async def list_projects(email: str, user: dict = Depends(current_user)):
     if not user.get("admin") and email != user.get("email"):
         raise HTTPException(status_code=403, detail="not allowed for this email")
     projects = await Project.find_many({"created_by": email}).to_list()
@@ -121,7 +121,7 @@ async def get_project(project_id: str, user: dict = Depends(current_user)):
 
 
 @dashboard_router.get("/conversations/{project_id}")
-async def list_of_conversations(project_id: str, user: dict = Depends(current_user)):
+async def list_conversations(project_id: str, user: dict = Depends(current_user)):
     await project_for_user(project_id, user)
     conversations = await Conversations.find_many({"project_id": project_id}).to_list()
     return conversations
@@ -169,7 +169,7 @@ async def toggle_openai_backend(
     project = await project_for_user(project_id, user)
 
     if backend not in ("azure", "openai"):
-        raise HTTPException(status_code=501, detail="unvalid backend")
+        raise HTTPException(status_code=501, detail="invalid backend")
 
     project.openai_backend = backend
 

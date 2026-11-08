@@ -57,6 +57,11 @@ app.include_router(llm_router)
 app.include_router(dashboard_router)
 
 
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 # Initialize database
 async def init_db():
     # Create an asynchronous MongoDB client

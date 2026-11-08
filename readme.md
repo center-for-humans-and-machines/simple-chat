@@ -43,14 +43,17 @@ Simple Chat comes in two flavors:
 - **Self-hosted Simple Chat (this repository)** — the open-source, community-driven version. You deploy and operate it on your own infrastructure (Docker Compose or Kubernetes) and have full control over the code, data, and configuration.
 - **Simple Chat as a Service** — a hosted version operated by the [Center for Humans and Machines](https://www.mpib-berlin.mpg.de/chm) at the Max Planck Institute for Human Development. Researchers use it through a web dashboard without deploying anything themselves.
 
-The hosted service is built on Simple Chat but extends it with features needed to run it as a multi-user platform, such as user accounts with email verification, role-based project access (Superadmin, Level 2 and Level 1 researchers), and per-project model and API-key configuration. **The source code of the service version is not published for safety and security reasons**, since it runs as shared infrastructure handling multiple research groups' data and API keys. This repository remains the openly available, self-hostable version of Simple Chat.
+The hosted service is built on Simple Chat but extends it with features needed to run it as a multi-user platform, such as user accounts with email verification, role-based project access (Superadmin, Level 2 and Level 1 researchers), and per-project model and API-key configuration.
+**The source code of the service version is not published for safety and security reasons**, since it runs as shared infrastructure handling multiple research groups' data and API keys.
+This repository remains the openly available, self-hostable version of Simple Chat.
 
 ### Using the service
 
 1. Read the [Simple Chat as a Service documentation](https://simple-chat.chm.mpib-berlin.mpg.de/).
 1. Register an account on the [dashboard](https://simple-chat-dashboard.chm.mpib-berlin.mpg.de/) and verify your email address via the activation link (valid for 48 hours).
 1. Create a new project in the dashboard, or ask a Superadmin or a Level 2 researcher of an existing project to add you to it.
-1. Enter **your own LLM API key** under _Project Settings → [API & Model Architecture](https://simple-chat.chm.mpib-berlin.mpg.de/docs/researcher-guide/projects/project-settings/api-and-model-architecture)_, and select the model (and, for providers such as Together.AI or Fireworks, the API endpoint). Supported providers include OpenAI, GWDG, Together.AI, and Fireworks. The key is stored hidden and usage is billed by your provider to your account, so use a key approved by your institution.
+1. Enter **your own LLM API key** under _Project Settings → [API & Model Architecture](https://simple-chat.chm.mpib-berlin.mpg.de/docs/researcher-guide/projects/project-settings/api-and-model-architecture)_, and select the model (and, for providers such as Together.AI or Fireworks, the API endpoint).
+   Supported providers include OpenAI, GWDG, Together.AI, and Fireworks. The key is stored hidden and usage is billed by your provider to your account, so use a key approved by your institution.
 1. Configure the system message and chat settings, activate the project, and [embed the chat](https://simple-chat.chm.mpib-berlin.mpg.de/docs/integration-guide/overview) in your survey platform (e.g., [Qualtrics](https://simple-chat.chm.mpib-berlin.mpg.de/docs/integration-guide/qualtrics)).
 
 ### Which one should I use?
@@ -155,11 +158,16 @@ Each project can limit how participants use the chat. Set the limits in the dash
 | Rate limit counted per            | Participant ID                      | `Participant ID` counts per `participant_id`, falling back to the IP address when the URL has none. `IP address` counts per IP address.                                                                                                                                             |
 | Allowed embedding origins         | Empty (any site may embed the chat) | Origins allowed to show the chat in an iframe, e.g. `https://*.qualtrics.com`, see below.                                                                                                                                                                                           |
 
-When a limit is reached, the participant sees a short message instead of an error, and the chat input closes. The message does not say which limit was reached. A rate-limited message is not sent: it goes back into the input field with a notice to wait. Token caps are enforced before each model call: the backend reserves the prompt and the longest reply that still fits under every cap that applies (at most 4096 tokens) and passes that as `max_tokens` to the model, so a reply cannot run past the cap and concurrent calls share the remaining budget instead of all passing at once. The prompt is reserved with a conservative estimate: it adds the tokens providers count per message, a margin for models whose tokenizer differs from tiktoken's `cl100k_base`, and the highest token cost an image can have for the model. Image messages therefore need a lot of room under a cap, especially with `gpt-4o-mini`, which counts images at a much higher token rate. Chat usage is recorded with the same estimates, because streamed replies do not report the provider's count.
+When a limit is reached, the participant sees a short message instead of an error, and the chat input closes. The message does not say which limit was reached. A rate-limited message is not sent: it goes back into the input field with a notice to wait.
+Token caps are enforced before each model call: the backend reserves the prompt and the longest reply that still fits under every cap that applies (at most 4096 tokens) and passes that as `max_tokens` to the model, so a reply cannot run past the cap and concurrent calls share the remaining budget instead of all passing at once.
+The prompt is reserved with a conservative estimate: it adds the tokens providers count per message, a margin for models whose tokenizer differs from tiktoken's `cl100k_base`, and the highest token cost an image can have for the model.
+Image messages therefore need a lot of room under a cap, especially with `gpt-4o-mini`, which counts images at a much higher token rate. Chat usage is recorded with the same estimates, because streamed replies do not report the provider's count.
 
 **Rate limits behind a proxy.** By default the backend uses the address of the connection as the participant's IP. Behind a reverse proxy or Kubernetes ingress this is the proxy's address, so set `TRUST_X_FORWARDED_FOR=true` in `backend/.env` to use the `X-Forwarded-For` header instead. Only enable it when a proxy sets this header, because participants can otherwise send their own.
 
-**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site. The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml); in Kubernetes, set it to the backend URL). Without `BACKEND_INTERNAL_URL` the header is not sent. In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
+**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site.
+The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml); in Kubernetes, set it to the backend URL). Without `BACKEND_INTERNAL_URL` the header is not sent.
+In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
 
 **CORS.** `CORS_ALLOWED_ORIGINS` in `backend/.env` limits which origins may call the backend. The default `*` allows all. Set it to the chat frontend and dashboard origins, e.g. `CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com`. The survey's origin is not needed, because the chat inside the iframe calls the backend from the frontend's origin.
 
@@ -169,7 +177,7 @@ If you use Simple Chat in your research, please cite as follows:
 
 - BibTeX:
 
-  ```
+  ```bibtex
   @misc{schettino2025facilitatingintegrationllmsonline,
         title={Facilitating the Integration of LLMs Into Online Experiments With Simple Chat},
         author={R. Bermudez Schettino and A. Dasmeh and L. Brinkmann},
@@ -183,7 +191,7 @@ If you use Simple Chat in your research, please cite as follows:
 
 - APA:
 
-  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_. arXiv. https://doi.org/10.48550/arXiv.2511.19123
+  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_. arXiv. [https://doi.org/10.48550/arXiv.2511.19123](https://doi.org/10.48550/arXiv.2511.19123)
 
 ## Related
 

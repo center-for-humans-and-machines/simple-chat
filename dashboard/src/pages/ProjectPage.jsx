@@ -234,7 +234,7 @@ function ProjectPage() {
         </Typography>
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Status : {projectInfo?.active ? "Active" : "Deactive"}
+          Status : {projectInfo?.active ? "Active" : "Inactive"}
         </Typography>
         <Button
           variant="contained"

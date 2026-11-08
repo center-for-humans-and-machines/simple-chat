@@ -166,7 +166,7 @@ function ResearchersList() {
                   >
                     <ListItemText
                       primary={`${project.project_id} - ${
-                        project.active ? "active" : "deactive"
+                        project.active ? "active" : "inactive"
                       }`}
                     />
                   </ListItemButton>
