@@ -10,10 +10,10 @@ Simple Chat runs with [Docker Compose](../compose.yml). All settings are read fr
 
 The Compose file offers two profiles. Both start the backend and a MongoDB database.
 
-| Profile | Command                                              | Chat frontend           | Dashboard               | Use                                     |
-| ------- | ---------------------------------------------------- | ----------------------- | ----------------------- | --------------------------------------- |
-| `dev`   | `docker compose --profile dev up --build`            | <http://localhost:1234> | <http://localhost:3001> | Local testing and development           |
-| `prod`  | `docker compose --profile prod up --build --detach`  | port 8080               | port 8081               | Running a study on a server             |
+| Profile | Command                                             | Chat frontend           | Dashboard               | Use                           |
+| ------- | --------------------------------------------------- | ----------------------- | ----------------------- | ----------------------------- |
+| `dev`   | `docker compose --profile dev up --build`           | <http://localhost:1234> | <http://localhost:3001> | Local testing and development |
+| `prod`  | `docker compose --profile prod up --build --detach` | port 8080               | port 8081               | Running a study on a server   |
 
 The `dev` profile serves the frontend and dashboard with hot reloading from the mounted source code. The `prod` profile builds them once and serves the static files with nginx. The backend listens on port 8000 in both profiles. Health checks on the components make errors visible in `docker compose logs`.
 

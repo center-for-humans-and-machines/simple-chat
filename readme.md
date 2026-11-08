@@ -55,15 +55,15 @@ The hosted service is built on Simple Chat but extends it with features needed t
 
 ### Which one should I use?
 
-| | Self-host (this repository) | Use the service |
-| --- | --- | --- |
-| **Setup** | Deploy with Docker Compose, configure database, object storage, and secrets | Register on the dashboard, no deployment needed |
-| **Technical skills required** | Server administration, Docker, basic DevOps | None beyond using a web dashboard |
-| **LLM API key** | Configured in the root `.env` file | Entered per project in the dashboard |
-| **Data storage** | On your own infrastructure, under your control | On infrastructure operated by MPIB |
-| **Maintenance and updates** | Your responsibility | Handled by the operators |
-| **Customization** | Full access to the source code; modify and extend freely | Configuration through the dashboard only |
-| **Best for** | Labs with IT support, strict data-residency requirements, or a need to change the code | Researchers who want to run LLM-based studies quickly without managing servers |
+|                               | Self-host (this repository)                                                            | Use the service                                                                |
+| ----------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Setup**                     | Deploy with Docker Compose, configure database, object storage, and secrets            | Register on the dashboard, no deployment needed                                |
+| **Technical skills required** | Server administration, Docker, basic DevOps                                            | None beyond using a web dashboard                                              |
+| **LLM API key**               | Configured in the root `.env` file                                                     | Entered per project in the dashboard                                           |
+| **Data storage**              | On your own infrastructure, under your control                                         | On infrastructure operated by MPIB                                             |
+| **Maintenance and updates**   | Your responsibility                                                                    | Handled by the operators                                                       |
+| **Customization**             | Full access to the source code; modify and extend freely                               | Configuration through the dashboard only                                       |
+| **Best for**                  | Labs with IT support, strict data-residency requirements, or a need to change the code | Researchers who want to run LLM-based studies quickly without managing servers |
 
 In short: **use the service** if you want to start collecting data quickly with your own API key and do not want to run servers. **Self-host this repository** if you need full control over the code and data, need to customize Simple Chat, or your institution requires data to stay on its own infrastructure.
 
@@ -111,7 +111,12 @@ Run Simple Chat on your computer and hold a first test conversation.
 1. On the project page, click **Open test chat** to chat with the model, or **Copy iframe code** to embed the chat in your survey, for example:
 
    ```html
-   <iframe src="http://localhost:1234/?pid=my_study&participant_id=PARTICIPANT_ID" width="100%" height="600" style="border:none;"></iframe>
+   <iframe
+     src="http://localhost:1234/?pid=my_study&participant_id=PARTICIPANT_ID"
+     width="100%"
+     height="600"
+     style="border:none;"
+   ></iframe>
    ```
 
    Replace `PARTICIPANT_ID` with your survey platform's participant variable. See [Integrating Into Online Experiments](./docs/readme.md#integrating-into-online-experiments) for the optional query parameters.
