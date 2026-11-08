@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Researchers list for the admin on the dashboard projects page, with each researcher's projects and a password reset (`GET /dashboard/researchers`, `PUT /dashboard/researchers/{email}/password`)
 - Quick Start section in the readme (clone, `.env`, Docker Compose, dashboard, embed, export)
 - Default model per project, chosen when creating a project in the dashboard
 - Iframe embed code and test chat link on the dashboard project page
@@ -35,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unsupported `model` values now show an error in the chat instead of failing silently
 
 ### Security
+
+- Researchers log in to the dashboard with their e-mail and a password, set by the admin when creating their first project, instead of the project ID; accounts are stored in the new `Researcher` collection
+- `POST /project/register` requires an admin login
+- All project dashboard routes (projects, conversations, settings, usage and limits) require a login token and are limited to the admin and the project owner
 
 ### Removed
 

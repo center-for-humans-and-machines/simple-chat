@@ -9,25 +9,33 @@ The dashboard is built with [React](https://react.dev/) and [Material-UI](https:
 Define the credentials `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_USERNAME_ADMIN` in the `.env` file to login to dashboard and create projects.
 Note: `DASHBOARD_USERNAME_ADMIN` in `.env` must be an email including `@`.
 
-To log in as admin, enter `DASHBOARD_USERNAME_ADMIN` as the email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
+To log in as admin, enter `DASHBOARD_USERNAME_ADMIN` as the email and `DASHBOARD_PASSWORD_ADMIN` as the password.
 
 ### Creating a Project
 
 As admin, click **Create a new project** and fill in:
 
 - Project ID (lowercase letters, numbers and underscores)
-- E-mail of the researcher who owns the project (prefilled with the admin email; the researcher logs in with this email and the project ID)
+- Email of the researcher who owns the project (prefilled with the admin email)
 - Model (the default model when the chat URL has no `model` parameter)
 - System message
 
+If the email belongs to a new researcher, a second step asks for the password
+this researcher will log in with (at least 8 characters, entered twice). Share
+it with the researcher securely. The account is stored in the `Researcher`
+collection with a salted PBKDF2 hash of the password. Later projects for the
+same email use the existing account and do not ask again.
+
+### Researchers
+
+Below the project list, the admin sees all researchers with their projects (click a project to open it). **Reset password** sets a new password; the old one stops working for new logins, but a researcher who is already logged in stays logged in until their token expires (at most 7 days). Researchers whose projects were created before passwords existed are marked **no password**; **Set password** creates their account.
+
 ### User
 
-To access the dashboard, navigate to the dashboard URL and sign in with:
+To access the dashboard, navigate to the dashboard URL and sign in with your
+email address and the password set when your first project was created.
 
-- Email address (must match the `requested_by` email from project registration)
-- Project ID (registered via the backend API)
-
-The login authenticates against the backend at `/dashboard/login/{email}/{project_id}`.
+The login sends both to `POST /dashboard/login` and gets back a token signed with `DASHBOARD_PASSWORD_ADMIN`, valid for 7 days. The dashboard routes require it as `Authorization: Bearer <token>` and only allow the admin or the project owner. Changing `DASHBOARD_PASSWORD_ADMIN` signs everyone out.
 
 ## Project Management
 

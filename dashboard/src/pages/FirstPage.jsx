@@ -12,7 +12,9 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import ResearchersList from "../components/ResearchersList";
 import { AuthContext } from "../contexts/AuthContext";
+import { authFetch } from "../authHeaders";
 
 function FirstPage() {
   const navigate = useNavigate();
@@ -28,7 +30,7 @@ function FirstPage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/projects/${authData.email}`
         );
 
@@ -108,6 +110,8 @@ function FirstPage() {
             })}
           </List>
         </div>
+
+        {authData.admin && <ResearchersList />}
       </Container>
     </>
   );

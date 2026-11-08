@@ -23,6 +23,7 @@ function Header() {
 
   const onLogout = () => {
     window.localStorage.removeItem("email");
+    window.localStorage.removeItem("token");
     setAuthData({
       email: ""
     });

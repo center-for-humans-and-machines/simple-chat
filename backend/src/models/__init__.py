@@ -5,6 +5,7 @@ from .models import (
     Project,
     ProjectLimits as ProjectLimits,
     RateLimitWindow,
+    Researcher,
     TokenBudget,
     TokenUsage,
 )
@@ -21,4 +22,5 @@ __beanie_models__ = [
     TokenUsage,
     TokenBudget,
     RateLimitWindow,
+    Researcher,
 ]
