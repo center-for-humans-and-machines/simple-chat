@@ -174,7 +174,10 @@ async def update_limits(project_id: str, limits: ProjectLimits):
         if not EMBED_ORIGIN_PATTERN.match(origin):
             raise HTTPException(
                 status_code=400,
-                detail=f"invalid embedding origin: {origin} (expected e.g. https://example.com or https://*.example.com)",
+                detail=(
+                    f"invalid embedding origin: {origin} "
+                    "(expected e.g. https://example.com or https://*.example.com)"
+                ),
             )
     project.limits = limits
     await project.save()
