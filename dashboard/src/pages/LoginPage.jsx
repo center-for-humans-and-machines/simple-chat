@@ -27,7 +27,7 @@ export default function LoginPage() {
     event.preventDefault();
 
     try {
-      let backendURL =
+      const backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
       const response = await fetch(`${backendURL}/dashboard/login`, {
         method: "POST",
@@ -41,7 +41,7 @@ export default function LoginPage() {
 
       const data = await response.json();
       console.log(`data`, data);
-      if (data.admin == true) {
+      if (data.admin) {
         setAuthData({
           email: email,
           admin: true

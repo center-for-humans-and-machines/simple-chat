@@ -40,13 +40,13 @@ The documentation below includes sample requests to the backend with [`curl`](ht
 
 Every conversation should be assigned to a project. Project must be registered in advance.
 
-The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, call this endpoint with an admin token from `POST /dashboard/login`:
+The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, set `ADMIN_TOKEN` to a token from `POST /dashboard/login` and call this endpoint:
 
 ```shell
 curl --request POST \
   --url https://YOUR_SIMPLE_CHAT_BACKEND_URL/project/register \
   --header 'content-type: application/json' \
-  --header 'authorization: Bearer ADMIN_TOKEN' \
+  --header "authorization: Bearer ${ADMIN_TOKEN}" \
   --data '{
   "project_id": "MY_PROJECT_ID",
   "requested_by": "MYEMAIL",

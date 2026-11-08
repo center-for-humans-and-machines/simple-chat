@@ -12,8 +12,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const emailInLocalStorage = window.localStorage.getItem("email");
-    const isAdmin =
-      window.localStorage.getItem("admin") == "true" ? true : false;
+    const isAdmin = window.localStorage.getItem("admin") === "true";
     console.log("useEffect in AuthContext", emailInLocalStorage);
     console.log("useEffect in isAdmin", isAdmin);
 

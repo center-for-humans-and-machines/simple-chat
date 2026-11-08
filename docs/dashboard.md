@@ -16,11 +16,15 @@ To log in as admin, enter `DASHBOARD_USERNAME_ADMIN` as the email and `DASHBOARD
 As admin, click **Create a new project** and fill in:
 
 - Project ID (lowercase letters, numbers and underscores)
-- E-mail of the researcher who owns the project (prefilled with the admin email)
+- Email of the researcher who owns the project (prefilled with the admin email)
 - Model (the default model when the chat URL has no `model` parameter)
 - System message
 
-If the e-mail belongs to a new researcher, a second step asks for the password this researcher will log in with (at least 8 characters, entered twice). Share it with the researcher securely. The account is stored in the `Researcher` collection with a salted PBKDF2 hash of the password. Later projects for the same e-mail use the existing account and do not ask again.
+If the email belongs to a new researcher, a second step asks for the password
+this researcher will log in with (at least 8 characters, entered twice). Share
+it with the researcher securely. The account is stored in the `Researcher`
+collection with a salted PBKDF2 hash of the password. Later projects for the
+same email use the existing account and do not ask again.
 
 ### Researchers
 
@@ -28,7 +32,8 @@ Below the project list, the admin sees all researchers with their projects (clic
 
 ### User
 
-To access the dashboard, navigate to the dashboard URL and sign in with your e-mail address and the password set when your first project was created.
+To access the dashboard, navigate to the dashboard URL and sign in with your
+email address and the password set when your first project was created.
 
 The login sends both to `POST /dashboard/login` and gets back a token signed with `DASHBOARD_PASSWORD_ADMIN`, valid for 7 days. The dashboard routes require it as `Authorization: Bearer <token>` and only allow the admin or the project owner. Changing `DASHBOARD_PASSWORD_ADMIN` signs everyone out.
 
