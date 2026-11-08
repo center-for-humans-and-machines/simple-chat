@@ -40,13 +40,13 @@ The documentation below includes sample requests to the backend with [`curl`](ht
 
 Every conversation should be assigned to a project. Project must be registered in advance.
 
-The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, call this endpoint with an admin token from `POST /dashboard/login`:
+The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, set `ADMIN_TOKEN` to a token from `POST /dashboard/login` and call this endpoint:
 
 ```shell
 curl --request POST \
   --url https://YOUR_SIMPLE_CHAT_BACKEND_URL/project/register \
   --header 'content-type: application/json' \
-  --header 'authorization: Bearer ADMIN_TOKEN' \
+  --header "authorization: Bearer ${ADMIN_TOKEN}" \
   --data '{
   "project_id": "MY_PROJECT_ID",
   "requested_by": "MYEMAIL",
@@ -193,16 +193,22 @@ Successful response should be like:
 
 ## Multi-Round Conversation
 
-If you need a conversation to be carried out in multiple sections but the conversation history remains in the subsequent sections, you can add `&round=` in the url as a query parameter. Zero is not accepted and the numbers must be increased in sequential order (e.g., 1, 2, 3, 4, 5,...).
+If you need a conversation to be carried out in multiple sections but the conversation history remains in the subsequent sections, you can add `&round=` in the URL as a query parameter. Zero is not accepted and the numbers must be increased in sequential order (e.g., 1, 2, 3, 4, 5,...).
 
 When creating a new conversation, the system automatically places the previous conversation messages at the beginning of the new conversation messages.
 
 **Note:** This option overrides `custom message`.
+
+## Streaming
+
+By default, assistant replies are streamed to the participant chunk by chunk. To receive each reply as a single message instead, add `&stream=false` to the URL. The setting is stored per conversation.
+
+After every assistant reply (streamed or not), the backend emits a `message_end` Socket.IO event with `{"session_id": ..., "status": "ok" | "error"}`. The bundled frontend ignores it; it is meant for clients that need to know when a reply is complete, such as the [latency benchmark](../benchmarks/latency).
 
 ## Restrict Email Domains
 
 To restrict user registration to specific email domains, search in the codebase for the string `@mydomain.com` and replace it with your desired domain, e.g., `example.com`. This change should be made in the following files:
 
 - `dashboard/src/pages/LoginPage.jsx` (label for email input)
-- `dashboard/src/contexts/AuthContext.jsx` (validation of email in local storage)
+- `dashboard/src/contexts/AuthContext.jsx` (validation of email in localStorage)
 - `backend/src/routes/project.py` (validation of `requested_by` field)

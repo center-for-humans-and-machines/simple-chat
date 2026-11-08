@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -36,7 +36,7 @@ function ResearchersList() {
   const backendURL =
     process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 
-  const loadResearchers = async () => {
+  const loadResearchers = useCallback(async () => {
     try {
       const response = await authFetch(`${backendURL}/dashboard/researchers`);
       if (!response.ok) {
@@ -47,12 +47,11 @@ function ResearchersList() {
       console.error("Error getting researchers:", error.message);
       alert("There was an error to get the list of researchers.");
     }
-  };
+  }, [backendURL]);
 
   useEffect(() => {
     loadResearchers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadResearchers]);
 
   const openDialog = researcher => {
     setSelected(researcher);
@@ -113,8 +112,8 @@ function ResearchersList() {
 
       {researchers.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          No researchers yet. They are added when you create a project for
-          their e-mail.
+          No researchers yet. They are added when you create a project for their
+          email.
         </Typography>
       ) : (
         <List
@@ -166,7 +165,7 @@ function ResearchersList() {
                   >
                     <ListItemText
                       primary={`${project.project_id} - ${
-                        project.active ? "active" : "deactive"
+                        project.active ? "active" : "inactive"
                       }`}
                     />
                   </ListItemButton>

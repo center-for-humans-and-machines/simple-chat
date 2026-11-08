@@ -67,6 +67,7 @@ async def get_response(
     model: str,
     participant_id: str = None,
     project_id: str = None,
+    stream: bool = True,
 ) -> MessageDocument:
     omessages = [parse_to_openai(message) for message in messages]
     full_response = await call_model(
@@ -79,11 +80,19 @@ async def get_response(
         project_id=project_id,
         sio_server=sio_server,
         sid=sid,
+        stream=stream,
     )
 
     res_message = parse_from_openai(full_response)
 
     return res_message
+
+
+def parse_stream_flag(value) -> bool:
+    """Parse the optional `stream` query parameter; anything but an explicit "off" streams."""
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in ("false", "0", "no", "off")
 
 
 async def upload(img, message_id):

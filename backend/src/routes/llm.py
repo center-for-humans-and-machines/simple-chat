@@ -109,7 +109,7 @@ async def send_message(data: LlmCallInput):
 
 
 @llm_router.post("/json_call")
-async def send_message(data: LlmCallInput):
+async def send_json_message(data: LlmCallInput):
     project = await Project.find_many({"project_id": data.project_id}).to_list()
     if len(project) == 0:
         raise HTTPException(status_code=400, detail="project not found")

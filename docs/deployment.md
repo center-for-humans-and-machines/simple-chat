@@ -29,6 +29,7 @@ Two optional observability layers help to keep experiments robust:
 
 - **[Sentry](./observability/sentry.md)** provides application-level monitoring: setting `SENTRY_ENABLED=true` and supplying a valid Data Source Name (DSN) activates automatic reporting of runtime exceptions, performance issues, and user-facing errors.
 
-- **[Langfuse](./observability/langfuse.md)** adds LLM-level observability by tracing prompts, model responses, costs, latencies, and metadata such as participant IDs or experimental conditions. It thus enables fine-grained analysis of conversational behavior, error diagnosis, and reproducibility in LLM-driven experiments. Langfuse can be deployed either self-hosted or as a managed service, and it also supports version-controlled prompt management.
+- **[Langfuse](./observability/langfuse.md)** adds LLM-level observability by tracing prompts, model responses, costs, latencies, and metadata such as participant IDs or experimental conditions. It thus enables fine-grained analysis of conversational behavior, error diagnosis, and reproducibility in LLM-driven experiments.
+  Langfuse can be deployed either self-hosted or as a managed service, and it also supports version-controlled prompt management.
 
 For detailed setup instructions, see the [observability documentation](./observability/).

@@ -2,8 +2,8 @@
 import io
 
 import pandas as pd
-from fastapi import APIRouter, Body, HTTPException, Response
-from src.models.message import Conversations, MessageDocument
+from fastapi import APIRouter, HTTPException, Response
+from src.models.message import Conversations
 from src.utils.db import get_param
 from src.utils.logging import setup_logger
 from starlette.responses import StreamingResponse

@@ -52,7 +52,7 @@ services:
       - frontend-backend
     restart: always
     healthcheck:
-      test: curl --fail http://localhost:80 || exit 1
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
       interval: 60s
       retries: 5
       start_period: 20s
@@ -68,13 +68,16 @@ services:
       - DATABASE_NAME=chatbot
       - MONGO_URL=mongodb://db:27017
     env_file: .env
-    volumes:
-      - ./backend:/app
     networks:
       - frontend-backend
       - database
     restart: always
-    command: poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   dashboard-prod:
     profiles:
@@ -97,7 +100,7 @@ services:
       - NODE_ENV=production
     restart: always
     healthcheck:
-      test: curl --fail http://localhost:80 || exit 1
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
       interval: 60s
       retries: 5
       start_period: 20s

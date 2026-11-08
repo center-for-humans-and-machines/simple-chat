@@ -1,0 +1,9 @@
+# Ruff settings for Super-linter, based on its default template.
+# Store the cache in a temporary location
+cache-dir = "/tmp/.ruff_cache"
+
+# Same line length as .python-black and .pylintrc (max-line-length=100)
+line-length = 100
+
+[lint]
+ignore = ["E203"]
