@@ -1,0 +1,12 @@
+{"id": "p01", "length": "short", "content": "In one sentence, what is a cognitive bias?"}
+{"id": "p02", "length": "short", "content": "Give me three tips for staying focused while studying. Keep it under 50 words."}
+{"id": "p03", "length": "short", "content": "What is the capital of Australia, and why is it not Sydney? Answer in two sentences."}
+{"id": "p04", "length": "short", "content": "Suggest a name for a small vegetarian cafe. Reply with the name and one sentence explaining it."}
+{"id": "p05", "length": "medium", "content": "Explain in about 100 words how vaccines train the immune system."}
+{"id": "p06", "length": "medium", "content": "I have to choose between a job with higher pay and a job with more free time. List the main things I should consider, in about 120 words."}
+{"id": "p07", "length": "medium", "content": "Summarise the main arguments for and against a four-day work week in about 120 words."}
+{"id": "p08", "length": "medium", "content": "Write a short, polite email (about 100 words) asking a colleague to review a report by Friday."}
+{"id": "p09", "length": "long", "content": "Explain the difference between correlation and causation in about 250 words, with two everyday examples."}
+{"id": "p10", "length": "long", "content": "Describe how a bill becomes a law in a parliamentary democracy, in about 250 words, using numbered steps."}
+{"id": "p11", "length": "long", "content": "Write a 250-word short story about a lighthouse keeper who receives an unexpected letter."}
+{"id": "p12", "length": "long", "content": "Give a beginner-friendly overview of how large language models generate text, in about 250 words."}

@@ -1,0 +1,3 @@
+# Names your deployment; copy from conditions.example.toml
+conditions.toml
+.venv/

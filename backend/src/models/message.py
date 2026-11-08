@@ -39,6 +39,8 @@ class Conversations(Document):
     # messages sent by the participant in this conversation; messages copied
     # from earlier rounds are not counted
     user_turns: int = 0
+    # Stream the assistant reply chunk by chunk (default) or send it as one message.
+    stream: bool = True
 
 
 class SearchParameters(Document):
