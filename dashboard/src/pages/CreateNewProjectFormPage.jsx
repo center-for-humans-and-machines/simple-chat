@@ -12,8 +12,7 @@ import { useNavigate } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
 import { AuthContext } from "../contexts/AuthContext";
 import { authFetch } from "../authHeaders";
-
-const PASSWORD_MIN_LENGTH = 8;
+import { PASSWORD_MIN_LENGTH } from "../passwordRules";
 
 function CreateNewProjectFormPage() {
   const { authData } = useContext(AuthContext);

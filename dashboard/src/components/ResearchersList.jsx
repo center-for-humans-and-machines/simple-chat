@@ -19,8 +19,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { authFetch } from "../authHeaders";
-
-const PASSWORD_MIN_LENGTH = 8;
+import { PASSWORD_MIN_LENGTH } from "../passwordRules";
 
 // Admin only: researchers with their projects, and a password reset
 function ResearchersList() {

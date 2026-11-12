@@ -22,7 +22,7 @@ from src.models.models import Project, Researcher
 
 TOKEN_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 TOKEN_SECRET_MIN_LENGTH = 32
-PASSWORD_MIN_LENGTH = 8
+PASSWORD_MIN_LENGTH = 8  # also in dashboard/src/passwordRules.js
 PASSWORD_ITERATIONS = 600_000
 # checked for unknown emails, so they take as long as a wrong password; no password matches it
 DUMMY_PASSWORD_HASH = f"pbkdf2_sha256${PASSWORD_ITERATIONS}${'0' * 32}${'0' * 64}"
