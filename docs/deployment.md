@@ -16,11 +16,11 @@ Simple Chat includes a Docker Compose file for local development. It offers two 
 
 [Docker Compose](../compose.yml) runs the application. Run the commands below from the root directory of the project.
 
-| Action                                        | Development                                        | Production                                          |
-| --------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
-| Build and start                               | `docker compose --profile dev up --build --detach` | `docker compose --profile prod up --build --detach` |
-| Stop                                          | `docker compose --profile dev stop`                | `docker compose --profile prod stop`                |
-| Stop and remove (local database data is lost) | `docker compose --profile dev down --volumes`      | `docker compose --profile prod down --volumes`      |
+| Action                                        | Development                                                         | Production                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Build and start                               | `docker compose --profile dev up --build --detach --remove-orphans` | `docker compose --profile prod up --build --detach --remove-orphans` |
+| Stop                                          | `docker compose --profile dev stop`                                 | `docker compose --profile prod stop`                                 |
+| Stop and remove (local database data is lost) | `docker compose --profile dev down --volumes`                       | `docker compose --profile prod down --volumes`                       |
 
 The development frontend is accessible on localhost:1234 and the dashboard on localhost:3001. The production profile builds the React projects and serves them with nginx; the frontend is accessible on localhost:8080 and the dashboard on localhost:8081.
 
@@ -35,7 +35,7 @@ Instead, it should be set in the `.env` file of the frontend before building the
 
 Two optional observability layers help to keep experiments robust:
 
-- **[Sentry](./observability/sentry.md)** provides application-level monitoring: setting `SENTRY_ENABLED=true` and supplying a valid Data Source Name (DSN) activates automatic reporting of runtime exceptions, performance issues, and user-facing errors.
+- **[Sentry](./observability/sentry.md)** provides application-level monitoring: setting `SENTRY_ENABLED=true` and supplying a valid Data Source Name (DSN) activates automatic reporting of runtime exceptions, performance issues, and user-facing errors. The backend reads these values at runtime. The frontend reads `SENTRY_ENABLED` and `SENTRY_DSN` at build time, so set them in the frontend `.env` file before building the image, as with `REACT_APP_BACKEND_URL` above.
 
 - **[Langfuse](./observability/langfuse.md)** adds LLM-level observability by tracing prompts, model responses, costs, latencies, and metadata such as participant IDs or experimental conditions. It thus enables fine-grained analysis of conversational behavior, error diagnosis, and reproducibility in LLM-driven experiments.
   Langfuse can be deployed either self-hosted or as a managed service, and it also supports version-controlled prompt management.
