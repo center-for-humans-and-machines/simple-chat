@@ -93,10 +93,17 @@ def read_token(token: str) -> Optional[dict]:
         payload = base64.urlsafe_b64decode(encoded.encode())
     except (ValueError, TypeError):
         return None
-    if not hmac.compare_digest(_sign(payload), signature):
+    # compare bytes: compare_digest raises TypeError for str with non-ASCII characters
+    if not hmac.compare_digest(
+        _sign(payload).encode(), signature.encode("utf-8", "surrogateescape")
+    ):
         return None
-    data = json.loads(payload)
-    if data.get("exp", 0) < time.time():
+    try:
+        data = json.loads(payload)
+        expired = data.get("exp", 0) < time.time()
+    except (ValueError, TypeError, AttributeError):
+        return None
+    if expired:
         return None
     return data
 
