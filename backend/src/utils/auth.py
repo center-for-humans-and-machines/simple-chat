@@ -2,7 +2,9 @@
 
 /dashboard/login returns a token that the dashboard sends back as
 `Authorization: Bearer <token>`. The token is signed with
-DASHBOARD_PASSWORD_ADMIN, so only the backend can issue one.
+DASHBOARD_TOKEN_SECRET, so only the backend can issue one. It is kept apart
+from DASHBOARD_PASSWORD_ADMIN so that a researcher's token cannot be used to
+guess the admin password offline.
 """
 import base64
 import hashlib
@@ -17,6 +19,7 @@ from fastapi import Depends, Header, HTTPException
 from src.models.models import Project, Researcher
 
 TOKEN_LIFETIME_SECONDS = 7 * 24 * 60 * 60
+TOKEN_SECRET_MIN_LENGTH = 32
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_ITERATIONS = 600_000
 
@@ -53,7 +56,13 @@ async def authenticate(email: str, password: str) -> Optional[dict]:
 
 
 def _secret() -> bytes:
-    return os.environ["DASHBOARD_PASSWORD_ADMIN"].encode()
+    secret = os.environ.get("DASHBOARD_TOKEN_SECRET", "")
+    if len(secret) < TOKEN_SECRET_MIN_LENGTH:
+        raise RuntimeError(
+            f"DASHBOARD_TOKEN_SECRET must be set to a random value of at least "
+            f"{TOKEN_SECRET_MIN_LENGTH} characters, e.g. `openssl rand -hex 32`."
+        )
+    return secret.encode()
 
 
 def _sign(payload: bytes) -> str:

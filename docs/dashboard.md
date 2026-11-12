@@ -6,7 +6,7 @@ The dashboard is built with [React](https://react.dev/) and [Material-UI](https:
 
 ### Admin
 
-Define the credentials `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_USERNAME_ADMIN` in the `.env` file to login to dashboard and create projects.
+Define the credentials `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_USERNAME_ADMIN` and the token secret `DASHBOARD_TOKEN_SECRET` in the `.env` file to login to dashboard and create projects.
 Note: `DASHBOARD_USERNAME_ADMIN` in `.env` must be an email including `@`.
 
 To log in as admin, enter `DASHBOARD_USERNAME_ADMIN` as the email and `DASHBOARD_PASSWORD_ADMIN` as the password.
@@ -35,7 +35,7 @@ Below the project list, the admin sees all researchers with their projects (clic
 To access the dashboard, navigate to the dashboard URL and sign in with your
 email address and the password set when your first project was created.
 
-The login sends both to `POST /dashboard/login` and gets back a token signed with `DASHBOARD_PASSWORD_ADMIN`, valid for 7 days. The dashboard routes require it as `Authorization: Bearer <token>` and only allow the admin or the project owner. Changing `DASHBOARD_PASSWORD_ADMIN` signs everyone out.
+The login sends both to `POST /dashboard/login` and gets back a token signed with `DASHBOARD_TOKEN_SECRET` (a random value of at least 32 characters, e.g. from `openssl rand -hex 32`), valid for 7 days. The dashboard routes require it as `Authorization: Bearer <token>` and only allow the admin or the project owner. Changing `DASHBOARD_TOKEN_SECRET` signs everyone out.
 
 ## Project Management
 

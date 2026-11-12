@@ -107,7 +107,7 @@ Run Simple Chat locally and hold a first test conversation. You only need Docker
    cp frontend/env.example frontend/.env
    ```
 
-1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional.
+1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address), `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_TOKEN_SECRET` (a random value, e.g. from `openssl rand -hex 32`). All other variables are optional.
 
 1. Start the development stack:
 
