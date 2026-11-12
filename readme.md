@@ -175,6 +175,14 @@ docker compose exec -T db mongodump --archive > backup.archive  # back up the da
 docker compose --profile prod down --volumes    # remove everything, including the database
 ```
 
+**Upgrading from a version with `backend/.env`.** Settings now live in a single `.env` file in the repository root, and Compose stops with `env file .../.env not found` until it exists. Before running the update command above, move the file and add the new variables:
+
+```bash
+mv backend/.env .env
+```
+
+Then add `CHAT_URL` and `BACKEND_URL` (see step 2), and `FRONTEND_SENTRY_DSN` with the `SENTRY_DSN` value from `frontend/.env` if you use Sentry for the frontend. Without `CHAT_URL` and `BACKEND_URL`, the frontend and dashboard are built with `localhost` addresses. Then rebuild with `docker compose --profile prod up --build --detach`.
+
 Replace `prod` with `dev` for the local setup. See [deployment](./docs/deployment.md) for details on the two profiles and on optional error tracking and LLM observability.
 
 ## Development
