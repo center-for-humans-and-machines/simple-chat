@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 
 from src.models.models import TokenUsage
 from src.utils.configs import model_prices
+from src.utils.limits import add_recorded_usage
 from src.utils.logging import setup_logger
 
 logger = setup_logger(__name__)
@@ -30,6 +31,9 @@ async def record_usage(
             source=source,
             created_at=str(datetime.now()),
         ).insert()
+        await add_recorded_usage(
+            project_id, conversation_id, prompt_tokens + completion_tokens
+        )
     except Exception as e:
         # usage bookkeeping must never break a participant's conversation
         logger.error(f"Failed to record token usage: {e}")

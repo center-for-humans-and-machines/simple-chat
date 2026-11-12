@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from src.models.models import LlmCall, Project
 from src.utils.helpers import get_openai_backend
-from src.utils.limits import reserve_tokens, settle_tokens
+from src.utils.limits import release_tokens, reserve_tokens
 from src.utils.llm_model import (completion_with_backoff,
                                  estimate_prompt_tokens, init_model_endpoint)
 from src.utils.logging import setup_logger
@@ -31,6 +31,7 @@ async def call_within_token_cap(
     """Run a non-streaming completion within the project's token cap.
 
     `call` gets the completion kwargs that bound the reply (max_tokens) and returns the response.
+    The usage the provider reports is recorded before the reservation is released.
     """
     reservation, reason = await reserve_tokens(
         project, estimate_prompt_tokens(messages, model, extra_prompt)
@@ -42,16 +43,12 @@ async def call_within_token_cap(
     if reservation.max_tokens is not None:
         kwargs["max_tokens"] = reservation.max_tokens
 
-    used = 0
     try:
         response = await call(**kwargs)
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            used = usage.prompt_tokens + usage.completion_tokens
+        await record_response_usage(project.project_id, model, response, source="llm_api")
         return response
     finally:
-        # keep the budget equal to the recorded usage
-        await settle_tokens(reservation, used)
+        await release_tokens(reservation)
 
 
 async def call_llm_model(model: str, messages: list, project_id: str, **kwargs):
@@ -103,7 +100,6 @@ async def send_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
-    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -145,7 +141,6 @@ async def send_json_message(data: LlmCallInput):
     )
 
     await new_llm_call.insert()
-    await record_response_usage(data.project_id, data.model, response, source="llm_api")
 
     return response.choices[0].message.content
 
@@ -209,6 +204,5 @@ async def function_call(data: LlmFunctionCallInput):
     )
 
     await new_llm_call.insert()
-    await record_response_usage(data.project_id, "gpt-4o-mini", response, source="llm_api")
 
     return response.choices

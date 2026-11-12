@@ -11,7 +11,7 @@ from src.models.models import Project
 from src.models.settings import get_settings
 from src.utils.configs import is_reasoning_model, models
 from src.utils.db import create_message
-from src.utils.limits import limit_message, reserve_tokens, settle_tokens
+from src.utils.limits import limit_message, release_tokens, reserve_tokens
 from src.utils.logging import setup_logger
 from src.utils.usage import record_usage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -178,7 +178,6 @@ async def call_model(
     # reserve the tokens this call may use before it starts, so that neither a
     # long reply nor concurrent calls can go past the project's token caps
     reservation = None
-    used_tokens = 0
     if project_id is not None:
         project = await Project.find_one({"project_id": project_id})
         if project is not None:
@@ -263,9 +262,7 @@ async def call_model(
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
 
-        completion_estimate = completion_estimate_for(full_response)
-        used_tokens = prompt_estimate + completion_estimate
-        await record_call_usage(completion_estimate)
+        await record_call_usage(completion_estimate_for(full_response))
         usage_recorded = True
 
         if total_token_count > token_count_limit:
@@ -286,9 +283,7 @@ async def call_model(
             # The provider accepted the call, so it bills the prompt and the
             # reply streamed before the failure; record them and keep them
             # in the budgets instead of releasing the whole reservation.
-            completion_estimate = completion_estimate_for(full_response)
-            used_tokens = prompt_estimate + completion_estimate
-            await record_call_usage(completion_estimate)
+            await record_call_usage(completion_estimate_for(full_response))
         response_data = {
             "type": "message",
             "data": await create_message(
@@ -301,8 +296,8 @@ async def call_model(
         return "ExceptionError"  # to make sure the flow of the program is not disrupted. this record will not be saved.
 
     finally:
-        # Keep budgets equal to recorded usage.
-        await settle_tokens(reservation, used_tokens)
+        # The usage is recorded above; give back the reservation.
+        await release_tokens(reservation)
         # Tell the client the assistant reply is complete (streamed or not).
         await sio_server.emit(
             "message_end", {"session_id": session_id, "status": status}, sid

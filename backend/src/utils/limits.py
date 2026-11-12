@@ -48,6 +48,29 @@ class TokenReservation:
     max_tokens: Optional[int] = None
 
 
+def project_budget_key(project_id: str) -> str:
+    return f"project:{project_id}"
+
+
+def conversation_budget_key(conversation_id: str) -> str:
+    return f"conversation:{conversation_id}"
+
+
+async def add_recorded_usage(project_id: str, conversation_id: Optional[str], tokens: int):
+    """Add newly recorded usage to the budgets of its project and conversation.
+
+    Every existing budget is updated, whether or not its cap is set right now, so
+    a cap set later starts from the real usage. A budget that does not exist yet
+    is built from TokenUsage on first use and already includes this record.
+    """
+    keys = [project_budget_key(project_id)]
+    if conversation_id is not None:
+        keys.append(conversation_budget_key(conversation_id))
+    await TokenBudget.get_motor_collection().update_many(
+        {"key": {"$in": keys}}, {"$inc": {"tokens": tokens}}
+    )
+
+
 def _token_caps(project: Project, conversation_id: Optional[str]):
     """(budget key, cap, usage query, limit name) for every token cap that applies."""
     limits = project.limits
@@ -55,7 +78,7 @@ def _token_caps(project: Project, conversation_id: Optional[str]):
     if limits.max_tokens_per_project is not None:
         caps.append(
             (
-                f"project:{project.project_id}",
+                project_budget_key(project.project_id),
                 limits.max_tokens_per_project,
                 {"project_id": project.project_id},
                 "max_tokens_per_project",
@@ -64,7 +87,7 @@ def _token_caps(project: Project, conversation_id: Optional[str]):
     if conversation_id is not None and limits.max_tokens_per_conversation is not None:
         caps.append(
             (
-                f"conversation:{conversation_id}",
+                conversation_budget_key(conversation_id),
                 limits.max_tokens_per_conversation,
                 {"conversation_id": conversation_id},
                 "max_tokens_per_conversation",
@@ -102,7 +125,8 @@ async def reserve_tokens(
     """Reserve the prompt and a bounded reply against the project and conversation token caps.
 
     Return the reservation, or the name of the cap that leaves no room for a reply.
-    The caller passes reservation.max_tokens to the provider and calls settle_tokens afterwards.
+    The caller passes reservation.max_tokens to the provider, records the usage of
+    the call, and then calls release_tokens.
     """
     caps = _token_caps(project, conversation_id)
     if not caps:
@@ -132,12 +156,16 @@ async def reserve_tokens(
     return None, caps[0][3]
 
 
-async def settle_tokens(reservation: Optional[TokenReservation], used: int):
-    """Replace the reserved tokens with the tokens the call recorded as used."""
+async def release_tokens(reservation: Optional[TokenReservation]):
+    """Give back the reserved tokens once the call's usage is recorded.
+
+    record_usage adds the used tokens to the budgets, so the budget ends up at the
+    recorded usage. Recording before releasing keeps the budget from dropping below it.
+    """
     if reservation is None:
         return
     for key, held in reservation.holds:
-        await _add_tokens(key, used - held)
+        await _add_tokens(key, -held)
 
 
 def origin_allowed(origin: str, allowed_origins: List[str]) -> bool:

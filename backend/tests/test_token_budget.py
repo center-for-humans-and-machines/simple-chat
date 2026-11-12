@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from src.models.models import TokenBudget
 from src.utils import llm_model
-from src.utils.limits import MAX_COMPLETION_TOKENS, reserve_tokens, settle_tokens
+from src.utils.limits import MAX_COMPLETION_TOKENS, release_tokens, reserve_tokens
 from src.utils.llm_model import (DEFAULT_IMAGE_TOKENS, IMAGE_TOKENS, call_model,
                                  estimate_prompt_tokens, num_tokens_from_string)
 from src.utils.usage import record_usage
@@ -62,13 +62,29 @@ async def test_conversation_cap_is_reserved_together_with_the_project_cap(make_p
     assert await budget(f"project:{project.project_id}") == 50
 
 
-async def test_settle_replaces_the_reservation_with_the_usage(make_project):
+async def test_recording_and_releasing_leaves_the_usage(make_project):
     project = await make_project(max_tokens_per_project=1000)
     reservation, _ = await reserve_tokens(project, 10)
 
-    await settle_tokens(reservation, 25)
+    await record_usage(project.project_id, "gpt-4o", 10, 15, estimated=True)
+    await release_tokens(reservation)
 
     assert await budget(f"project:{project.project_id}") == 25
+
+
+async def test_budget_stays_current_while_the_cap_is_unset(make_project):
+    project = await make_project(max_tokens_per_project=1000)
+    await record_usage(project.project_id, "gpt-4o", 100, 0, estimated=True, conversation_id="conv")
+    await reserve_tokens(project, 1)  # builds the budget
+    assert await budget(f"project:{project.project_id}") > 100
+
+    # the cap is removed, usage keeps coming in, then a cap is set again
+    project.limits.max_tokens_per_project = None
+    await record_usage(project.project_id, "gpt-4o", 2000, 0, estimated=True, conversation_id="conv")
+    project.limits.max_tokens_per_project = 2000
+
+    _, reason = await reserve_tokens(project, 1)
+    assert reason == "max_tokens_per_project"
 
 
 async def test_concurrent_calls_cannot_pass_the_cap_together(make_project):
@@ -85,7 +101,8 @@ async def test_concurrent_calls_cannot_pass_the_cap_together(make_project):
 
     # every call uses its whole reply: the total still stays within the cap
     for r in reservations:
-        await settle_tokens(r, 100 + r.max_tokens)
+        await record_usage(project.project_id, "gpt-4o", 100, r.max_tokens, estimated=True)
+        await release_tokens(r)
     assert await budget(f"project:{project.project_id}") <= cap
 
 
