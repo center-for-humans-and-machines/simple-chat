@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from src.models.models import TokenUsage
 from src.utils.configs import model_prices
@@ -75,41 +75,60 @@ def _empty_bucket() -> Dict:
     }
 
 
-def _add(bucket: Dict, record: TokenUsage):
-    bucket["prompt_tokens"] += record.prompt_tokens
-    bucket["completion_tokens"] += record.completion_tokens
-    bucket["total_tokens"] += record.prompt_tokens + record.completion_tokens
-    bucket["calls"] += 1
-    cost = estimate_cost(record.model, record.prompt_tokens, record.completion_tokens)
+def _add(bucket: Dict, group: Dict):
+    prompt, completion = group["prompt_tokens"], group["completion_tokens"]
+    bucket["prompt_tokens"] += prompt
+    bucket["completion_tokens"] += completion
+    bucket["total_tokens"] += prompt + completion
+    bucket["calls"] += group["calls"]
+    # prices are per token, so the cost of a group is the cost of its sums
+    cost = estimate_cost(group["model"], prompt, completion)
     if cost is None:
         bucket["has_unpriced_model"] = True
     else:
         bucket["estimated_cost_usd"] += cost
-    if record.estimated:
+    if group["estimated"]:
         bucket["has_estimated_tokens"] = True
 
 
-def summarize_usage(records: List[TokenUsage]) -> Dict:
+async def summarize_usage(query: dict) -> Dict:
+    """Usage of the TokenUsage records matching `query`, summed in MongoDB."""
+    groups = await TokenUsage.find(query).aggregate(
+        [
+            {
+                "$group": {
+                    "_id": {"model": "$model", "conversation_id": "$conversation_id"},
+                    "prompt_tokens": {"$sum": "$prompt_tokens"},
+                    "completion_tokens": {"$sum": "$completion_tokens"},
+                    "calls": {"$sum": 1},
+                    "estimated": {"$max": "$estimated"},
+                    "participant_id": {"$first": "$participant_id"},
+                }
+            },
+            {"$sort": {"_id.conversation_id": 1, "_id.model": 1}},
+        ]
+    ).to_list()
+
     total = _empty_bucket()
     by_model: Dict[str, Dict] = {}
     by_conversation: Dict[str, Dict] = {}
 
-    for record in records:
-        _add(total, record)
-        _add(by_model.setdefault(record.model, _empty_bucket()), record)
+    for group in groups:
+        group = {**group, **group["_id"]}
+        _add(total, group)
+        _add(by_model.setdefault(group["model"], _empty_bucket()), group)
 
-        if record.conversation_id:
+        if group["conversation_id"]:
             bucket = by_conversation.setdefault(
-                record.conversation_id,
+                group["conversation_id"],
                 {
                     **_empty_bucket(),
-                    "participant_id": record.participant_id,
+                    "participant_id": group["participant_id"],
                     "models": [],
                 },
             )
-            _add(bucket, record)
-            if record.model not in bucket["models"]:
-                bucket["models"].append(record.model)
+            _add(bucket, group)
+            bucket["models"].append(group["model"])
 
     return {
         "total": total,

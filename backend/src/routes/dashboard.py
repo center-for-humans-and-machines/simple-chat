@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, Body, HTTPException
 from src.models.message import Conversations
-from src.models.models import Project, ProjectLimits, TokenUsage
+from src.models.models import Project, ProjectLimits
 from src.utils.configs import model_prices
 from src.utils.logging import setup_logger
 from src.utils.usage import summarize_usage
@@ -126,16 +126,15 @@ async def update_loading_message(
 
 @dashboard_router.get("/usage/{project_id}")
 async def project_usage(project_id: str):
-    records = await TokenUsage.find_many({"project_id": project_id}).to_list()
-    return {"project_id": project_id, "prices": model_prices, **summarize_usage(records)}
+    summary = await summarize_usage({"project_id": project_id})
+    return {"project_id": project_id, "prices": model_prices, **summary}
 
 
 @dashboard_router.get("/usage/{project_id}/conversation/{conversation_id}")
 async def conversation_usage(project_id: str, conversation_id: str):
-    records = await TokenUsage.find_many(
+    summary = await summarize_usage(
         {"project_id": project_id, "conversation_id": conversation_id}
-    ).to_list()
-    summary = summarize_usage(records)
+    )
     return {
         "conversation_id": conversation_id,
         "total": summary["total"],

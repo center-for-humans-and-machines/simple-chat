@@ -30,7 +30,12 @@ async def used_tokens(query: dict) -> int:
 
 async def project_token_cap_reached(project: Project) -> bool:
     cap = project.limits.max_tokens_per_project
-    return cap is not None and await used_tokens({"project_id": project.project_id}) >= cap
+    if cap is None:
+        return False
+    tokens = await _budget_tokens(
+        project_budget_key(project.project_id), {"project_id": project.project_id}
+    )
+    return tokens >= cap
 
 
 # Longest reply a call may generate while a token cap is set. A call near the
@@ -270,7 +275,10 @@ async def check_conversation_limits(project: Project, conversation: Conversation
             return "max_turns"
 
     if limits.max_tokens_per_conversation is not None:
-        tokens = await used_tokens({"conversation_id": conversation.conversation_id})
+        tokens = await _budget_tokens(
+            conversation_budget_key(conversation.conversation_id),
+            {"conversation_id": conversation.conversation_id},
+        )
         if tokens >= limits.max_tokens_per_conversation:
             return "max_tokens_per_conversation"
 
