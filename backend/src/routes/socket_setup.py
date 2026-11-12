@@ -43,6 +43,7 @@ async def conversation_limit_reached(sid, project, the_conversation) -> bool:
 
 
 CONVERSATION_NOT_READY_MESSAGE = "The chat is still starting. Please send your message again."
+IMAGE_NOT_DELIVERED_MESSAGE = "The image could not be sent. Please send a text message instead."
 
 
 async def find_conversation(sid, session_id):
@@ -408,7 +409,15 @@ async def image_message(sid, data):
         content="",
     )
 
-    url = await upload(data["data"]["content"]["image"], str(uuid.uuid4()))
+    try:
+        url = await upload(data["data"]["content"]["image"], str(uuid.uuid4()))
+    except Exception as e:
+        # no object storage configured, or the upload failed
+        logger.error(f"Image upload failed for conversation {data['session_id']}: {e}")
+        await sio_server.emit(
+            "message_not_delivered", {"message": IMAGE_NOT_DELIVERED_MESSAGE}, sid
+        )
+        return
 
     message["content"] = [
         {"type": "text", "text": data["data"]["content"]["prompt"]},

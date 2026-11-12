@@ -54,3 +54,36 @@ async def test_conversation_ready_is_sent_once_the_conversation_is_stored(
     )
 
     assert stored_when_ready == [True]
+
+
+async def test_image_upload_failure_hands_the_message_back(make_project, emitted, monkeypatch):
+    from src.models.message import Conversations
+
+    project = await make_project()
+    await Conversations(
+        conversation_id="c1",
+        project_id=project.project_id,
+        participant_id="p1",
+        experiment_id="e1",
+        model="gpt-4o",
+        messages=[],
+        created_at="now",
+    ).insert()
+
+    async def no_storage(img, message_id):
+        raise RuntimeError("Image upload needs object storage: set the S3_* variables.")
+
+    async def get_session(sid):
+        return {"ip": "1.2.3.4"}
+
+    monkeypatch.setattr(socket_setup, "upload", no_storage)
+    monkeypatch.setattr(socket_setup.sio_server, "get_session", get_session)
+
+    await socket_setup.image_message(
+        "sid",
+        {"session_id": "c1", "participant_id": "p1", "data": {"content": {"prompt": "hi", "image": ""}}},
+    )
+
+    assert emitted == ["message_not_delivered"]
+    stored = await Conversations.find_one({"conversation_id": "c1"})
+    assert stored.messages == [] and stored.user_turns == 0
