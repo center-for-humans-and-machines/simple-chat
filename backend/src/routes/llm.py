@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from src.models.models import LlmCall, Project
+from src.utils.auth import same_email
 from src.utils.helpers import get_openai_backend
 from src.utils.limits import reserve_tokens, settle_tokens
 from src.utils.llm_model import (completion_with_backoff,
@@ -83,7 +84,7 @@ async def send_message(data: LlmCallInput):
         else:
             raise HTTPException(status_code=402, detail="project is too old to run")
 
-    if data.requested_by != project[0].created_by:
+    if not same_email(data.requested_by, project[0].created_by):
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
     response = await call_within_token_cap(
@@ -121,7 +122,7 @@ async def send_json_message(data: LlmCallInput):
         else:
             raise HTTPException(status_code=402, detail="project is too old to run")
 
-    if data.requested_by != project[0].created_by:
+    if not same_email(data.requested_by, project[0].created_by):
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
     response = await call_within_token_cap(
@@ -188,7 +189,7 @@ async def function_call(data: LlmFunctionCallInput):
         else:
             raise HTTPException(status_code=402, detail="project is too old to run")
 
-    if data.requested_by != project[0].created_by:
+    if not same_email(data.requested_by, project[0].created_by):
         raise HTTPException(status_code=400, detail="inputs are not compatible")
 
     response = await call_within_token_cap(

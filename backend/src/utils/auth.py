@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import time
 from typing import Optional
@@ -52,17 +53,37 @@ async def verify_password(password: str, password_hash: str) -> bool:
     return await asyncio.to_thread(_verify_password, password, password_hash)
 
 
+def normalize_email(email: str) -> str:
+    """Emails are stored and compared trimmed and in lowercase."""
+    return email.strip().lower()
+
+
+def same_email(a: str, b: str) -> bool:
+    return normalize_email(a) == normalize_email(b)
+
+
+def email_query(field: str, email: str) -> dict:
+    """Match `field` to the email ignoring case, so records saved before
+    emails were lowercased are still found."""
+    return {field: {"$regex": f"^{re.escape(normalize_email(email))}$", "$options": "i"}}
+
+
+def admin_email() -> str:
+    return normalize_email(os.environ["DASHBOARD_USERNAME_ADMIN"])
+
+
 def is_admin_login(email: str, password: str) -> bool:
     return hmac.compare_digest(
-        email.encode(), os.environ["DASHBOARD_USERNAME_ADMIN"].encode()
+        normalize_email(email).encode(), admin_email().encode()
     ) and hmac.compare_digest(password.encode(), os.environ["DASHBOARD_PASSWORD_ADMIN"].encode())
 
 
 async def authenticate(email: str, password: str) -> Optional[dict]:
     """Return the user for a dashboard login, or None."""
+    email = normalize_email(email)
     if is_admin_login(email, password):
         return {"email": email, "admin": True}
-    researcher = await Researcher.find_one({"email": email})
+    researcher = await Researcher.find_one(email_query("email", email))
     if researcher is None:
         await verify_password(password, DUMMY_PASSWORD_HASH)
         return None
@@ -132,6 +153,6 @@ async def project_for_user(project_id: str, user: dict) -> Project:
     project = await Project.find_one({"project_id": project_id})
     if not project:
         raise HTTPException(status_code=404, detail="project not found")
-    if not user.get("admin") and project.created_by != user.get("email"):
+    if not user.get("admin") and not same_email(project.created_by, user.get("email", "")):
         raise HTTPException(status_code=403, detail="not allowed for this project")
     return project

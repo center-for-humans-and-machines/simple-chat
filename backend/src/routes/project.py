@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
 from src.models import get_settings
 from src.models.models import CustomSystemMessage, Project, Researcher
-from src.utils.auth import PASSWORD_MIN_LENGTH, admin_user, hash_password
+from src.utils.auth import (PASSWORD_MIN_LENGTH, admin_user, email_query,
+                            hash_password, normalize_email, same_email)
 from src.utils.configs import available_models
 from src.utils.limits import frame_ancestors_policy
 from src.utils.logging import setup_logger
@@ -69,7 +70,7 @@ async def embed_policy(
 
 @project_router.post("/register")
 async def send_message(data: ProjectRegisterInput, user: dict = Depends(admin_user)):
-    data.requested_by = data.requested_by.strip()
+    data.requested_by = normalize_email(data.requested_by)
     email_pattern = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
     if not email_pattern.match(data.requested_by):
@@ -89,8 +90,8 @@ async def send_message(data: ProjectRegisterInput, user: dict = Depends(admin_us
 
     # a new researcher gets an account with the password the admin entered
     new_researcher = None
-    if data.requested_by != user["email"] and not await Researcher.find_one(
-        {"email": data.requested_by}
+    if not same_email(data.requested_by, user["email"]) and not await Researcher.find_one(
+        email_query("email", data.requested_by)
     ):
         if not data.researcher_password or len(data.researcher_password) < PASSWORD_MIN_LENGTH:
             raise HTTPException(
