@@ -7,7 +7,6 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: ^kubernetes/web-service/templates/
       - id: check-toml
       - id: check-merge-conflict
 
