@@ -8,6 +8,10 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 COPY . /usr/src/app
 # Install dependencies
+# Build-time settings, passed by compose.yml for the production profile
+ARG REACT_APP_BACKEND_URL
+ARG SENTRY_ENABLED
+ARG SENTRY_DSN
 RUN npm ci --include=dev && npm run build
 
 # Development stage

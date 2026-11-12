@@ -65,6 +65,7 @@ Each conversation displays the complete chat history and metadata in JSON format
 
 Set the backend URL via the `REACT_APP_BACKEND_URL` environment variable. If not set, it defaults to `http://localhost:8000`.
 Set the participant-facing chat URL used in the iframe code via `REACT_APP_FRONTEND_URL`. If not set, it defaults to `http://localhost:1234`.
+With Docker Compose, the production dashboard takes both from `BACKEND_URL` and `CHAT_URL` in the root `.env` file.
 
 ## Updating the Logo
 
