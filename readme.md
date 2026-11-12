@@ -149,7 +149,7 @@ To make Simple Chat reachable by participants, run it on one server, for example
    docker compose --profile prod up --build --detach
    ```
 
-   The chat frontend listens on port 8080, the dashboard on 8081 and the backend on 8000. The database is only reachable from the server itself.
+   The chat frontend listens on port 8080, the dashboard on 8081 and the backend on 8000. All of these ports and the database are bound to `127.0.0.1`, so they are only reachable from the server itself and outside traffic has to go through Caddy.
 
 1. Serve the three ports over HTTPS, which survey platforms require for iframes. For example, with [Caddy](https://caddyserver.com/docs/install) installed on the server, this `Caddyfile` obtains certificates automatically:
 

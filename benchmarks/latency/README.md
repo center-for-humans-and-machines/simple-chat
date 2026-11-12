@@ -68,14 +68,14 @@ The backend selects the provider per project.
 python run_backend.py --config conditions.toml
 
 # Direct-to-provider baseline (reads the same keys as the backend)
-python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
+python run_backend.py --config conditions.toml --mode direct --env-file ../../.env
 
 # End to end in browsers: desktop Chrome and emulated iPhone Safari,
 # 1/5/20 sessions open at once, 30 measured trials per block
 python run_e2e.py --config conditions.toml --trials 30
 
 # Direct baseline for the end-to-end run, on the same day with the same 30 requests
-python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env --requests-per-block 30
+python run_backend.py --config conditions.toml --mode direct --env-file ../../.env --requests-per-block 30
 
 # p50/p95 table, overhead table and figures
 python analyze.py

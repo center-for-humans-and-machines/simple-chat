@@ -39,7 +39,7 @@ services:
         - SENTRY_ENABLED=${SENTRY_ENABLED:-false}
         - SENTRY_DSN=${FRONTEND_SENTRY_DSN:-}
     ports:
-      - 8080:80
+      - 127.0.0.1:8080:80
     stdin_open: true
     depends_on:
       - db
@@ -61,7 +61,7 @@ services:
   backend:
     build: backend
     ports:
-      - 8000:8000
+      - 127.0.0.1:8000:8000
     depends_on:
       - db
     environment:
@@ -91,7 +91,7 @@ services:
         - REACT_APP_BACKEND_SOCKET_URL=${BACKEND_URL:-http://localhost:8000}
         - REACT_APP_FRONTEND_URL=${CHAT_URL:-http://localhost:8080}
     ports:
-      - 8081:80
+      - 127.0.0.1:8081:80
     networks:
       - frontend-backend
     depends_on:

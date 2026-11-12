@@ -10,7 +10,7 @@ conversation history and token limit do not change between requests.
 
 Usage:
     python run_backend.py --config conditions.toml
-    python run_backend.py --config conditions.toml --mode direct --env-file ../../backend/.env
+    python run_backend.py --config conditions.toml --mode direct --env-file ../../.env
 """
 
 # CLI output, deterministic shuffling, and recording individual request failures
