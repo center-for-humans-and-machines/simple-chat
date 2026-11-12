@@ -4,6 +4,7 @@ import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
 // import { Link } from "react-router-dom";
 
 import { AuthContext } from "../contexts/AuthContext";
+import { clearLogin } from "../authHeaders";
 
 // import Box from "@mui/material/Box";
 // import Drawer from "@mui/material/Drawer";
@@ -22,10 +23,10 @@ function Header() {
   const { setAuthData } = useContext(AuthContext);
 
   const onLogout = () => {
-    window.localStorage.removeItem("email");
-    window.localStorage.removeItem("token");
+    clearLogin();
     setAuthData({
-      email: ""
+      email: "",
+      admin: false
     });
   };
 
