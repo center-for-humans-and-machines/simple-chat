@@ -195,7 +195,33 @@ async def call_model(
     completion_kwargs = {}
     if reservation is not None and reservation.max_tokens is not None:
         completion_kwargs["max_tokens"] = reservation.max_tokens
+
+    def completion_estimate_for(text: str) -> int:
+        # the provider generates at most max_tokens, whatever tiktoken counts
+        estimate = num_tokens_from_string(text)
+        if completion_kwargs.get("max_tokens") is not None:
+            estimate = min(estimate, completion_kwargs["max_tokens"])
+        return estimate
+
+    async def record_call_usage(completion_tokens: int):
+        if project_id is None:
+            return
+        # streamed responses carry no `usage` with the pinned openai client,
+        # so these counts are tiktoken estimates
+        await record_usage(
+            project_id=project_id,
+            model=model,
+            prompt_tokens=prompt_estimate,
+            completion_tokens=completion_tokens,
+            estimated=True,
+            conversation_id=session_id,
+            participant_id=participant_id,
+        )
+
     status = "ok"
+    response = None
+    full_response = ""
+    usage_recorded = False
     try:
         response = await completion_with_backoff(
             client,
@@ -205,8 +231,6 @@ async def call_model(
             stream=stream,
             **completion_kwargs,
         )
-
-        full_response = ""
 
         if stream:
             new_message = True
@@ -239,24 +263,10 @@ async def call_model(
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
 
-        # the provider generates at most max_tokens, whatever tiktoken counts
-        completion_estimate = response_token_count
-        if completion_kwargs.get("max_tokens") is not None:
-            completion_estimate = min(completion_estimate, completion_kwargs["max_tokens"])
+        completion_estimate = completion_estimate_for(full_response)
         used_tokens = prompt_estimate + completion_estimate
-
-        if project_id is not None:
-            # streamed responses carry no `usage` with the pinned openai client,
-            # so these counts are tiktoken estimates
-            await record_usage(
-                project_id=project_id,
-                model=model,
-                prompt_tokens=prompt_estimate,
-                completion_tokens=completion_estimate,
-                estimated=True,
-                conversation_id=session_id,
-                participant_id=participant_id,
-            )
+        await record_call_usage(completion_estimate)
+        usage_recorded = True
 
         if total_token_count > token_count_limit:
             raise TokenError(
@@ -272,6 +282,13 @@ async def call_model(
 
     except Exception as e:
         status = "error"
+        if response is not None and not usage_recorded:
+            # The provider accepted the call, so it bills the prompt and the
+            # reply streamed before the failure; record them and keep them
+            # in the budgets instead of releasing the whole reservation.
+            completion_estimate = completion_estimate_for(full_response)
+            used_tokens = prompt_estimate + completion_estimate
+            await record_call_usage(completion_estimate)
         response_data = {
             "type": "message",
             "data": await create_message(
