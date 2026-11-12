@@ -23,6 +23,8 @@ TOKEN_LIFETIME_SECONDS = 7 * 24 * 60 * 60
 TOKEN_SECRET_MIN_LENGTH = 32
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_ITERATIONS = 600_000
+# checked for unknown emails, so they take as long as a wrong password; no password matches it
+DUMMY_PASSWORD_HASH = f"pbkdf2_sha256${PASSWORD_ITERATIONS}${'0' * 32}${'0' * 64}"
 
 
 # PBKDF2 takes about half a second, so the async wrappers below run it in a
@@ -61,7 +63,10 @@ async def authenticate(email: str, password: str) -> Optional[dict]:
     if is_admin_login(email, password):
         return {"email": email, "admin": True}
     researcher = await Researcher.find_one({"email": email})
-    if researcher and await verify_password(password, researcher.password_hash):
+    if researcher is None:
+        await verify_password(password, DUMMY_PASSWORD_HASH)
+        return None
+    if await verify_password(password, researcher.password_hash):
         return {"email": email, "admin": False}
     return None
 
