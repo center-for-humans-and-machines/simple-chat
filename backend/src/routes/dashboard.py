@@ -36,6 +36,8 @@ async def login(data: LoginInput):
     return {
         "status": True,
         "admin": user["admin"],
+        # the email as stored in the token, which the dashboard uses for its requests
+        "email": user["email"],
         "token": create_token(user["email"], user["admin"]),
     }
 

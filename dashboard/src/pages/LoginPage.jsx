@@ -32,7 +32,7 @@ export default function LoginPage() {
       const response = await fetch(`${backendURL}/dashboard/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: email.trim(), password })
       });
 
       if (!response.ok) {
@@ -40,22 +40,14 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      console.log(`data`, data);
-      if (data.admin) {
-        setAuthData({
-          email: email,
-          admin: true
-        });
-        window.localStorage.setItem("admin", true);
-      } else {
-        setAuthData({
-          email: email,
-          admin: false
-        });
-        window.localStorage.setItem("admin", false);
-      }
-
-      window.localStorage.setItem("email", email);
+      // use the email the token was issued for, so project requests match it
+      const loggedInEmail = data.email || email.trim();
+      setAuthData({
+        email: loggedInEmail,
+        admin: Boolean(data.admin)
+      });
+      window.localStorage.setItem("admin", Boolean(data.admin));
+      window.localStorage.setItem("email", loggedInEmail);
       window.localStorage.setItem("token", data.token);
       navigator("/");
       // You can save a token or user data in context/localStorage here
