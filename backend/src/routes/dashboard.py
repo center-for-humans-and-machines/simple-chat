@@ -4,6 +4,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 from src.models.message import Conversations
 from src.models.models import Project, ProjectLimits, Researcher, TokenUsage
 from src.utils.auth import (PASSWORD_MIN_LENGTH, admin_email, admin_user,
@@ -94,11 +95,16 @@ async def set_researcher_password(
     else:
         if not await Project.find_one(email_query("created_by", email)):
             raise HTTPException(status_code=404, detail="researcher not found")
-        await Researcher(
-            email=email,
-            password_hash=await hash_password(data.password),
-            created_at=str(datetime.now()),
-        ).insert()
+        try:
+            await Researcher(
+                email=email,
+                password_hash=await hash_password(data.password),
+                created_at=str(datetime.now()),
+            ).insert()
+        except DuplicateKeyError:
+            raise HTTPException(
+                status_code=409, detail="the account was just created by another request; try again."
+            )
 
     return {"status": True, "email": email}
 

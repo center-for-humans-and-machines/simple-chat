@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 from src.models import get_settings
 from src.models.models import CustomSystemMessage, Project, Researcher
 from src.utils.auth import (PASSWORD_MIN_LENGTH, admin_user, email_query,
@@ -114,9 +115,19 @@ async def send_message(data: ProjectRegisterInput, user: dict = Depends(admin_us
         model=data.model or None,
     )
 
+    # the project first, so a failed registration leaves no researcher account behind
+    try:
+        await new_project.insert()
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=400, detail="there is already a project with this project_id"
+        )
     if new_researcher:
-        await new_researcher.insert()
-    await new_project.insert()
+        try:
+            await new_researcher.insert()
+        except DuplicateKeyError:
+            # a concurrent request created the account; keep its password
+            pass
 
     return {"status": True, "doc_id": new_project.id, "project": new_project}
 

@@ -36,6 +36,10 @@ class Project(Document):
     model: Optional[str] = None
     limits: ProjectLimits = Field(default_factory=ProjectLimits)
 
+    class Settings:
+        # two concurrent registrations cannot both create the project
+        indexes = [pymongo.IndexModel([("project_id", pymongo.ASCENDING)], unique=True)]
+
 
 class LlmCall(Document):
     project_id: str
