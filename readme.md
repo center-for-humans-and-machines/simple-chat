@@ -171,7 +171,7 @@ Useful commands, run from the repository root:
 docker compose --profile prod logs --follow     # show logs
 docker compose --profile prod stop              # stop, keeping the data
 git pull && docker compose --profile prod up --build --detach  # update
-docker compose exec db mongodump --archive > backup.archive    # back up the database
+docker compose exec -T db mongodump --archive > backup.archive  # back up the database
 docker compose --profile prod down --volumes    # remove everything, including the database
 ```
 
