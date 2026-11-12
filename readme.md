@@ -107,7 +107,7 @@ Run Simple Chat locally and hold a first test conversation. You only need Docker
    cp frontend/env.example frontend/.env
    ```
 
-1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional.
+1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address), `DASHBOARD_PASSWORD_ADMIN` and `DASHBOARD_TOKEN_SECRET` (a random value, e.g. from `openssl rand -hex 32`). All other variables are optional.
 
 1. Start the development stack:
 
@@ -117,7 +117,7 @@ Run Simple Chat locally and hold a first test conversation. You only need Docker
 
    The first build takes a few minutes. The chat frontend runs on <http://localhost:1234>, the dashboard on <http://localhost:3001> and the backend on <http://localhost:8000>.
 
-1. Open the dashboard and log in with `DASHBOARD_USERNAME_ADMIN` as email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
+1. Open the dashboard and log in with `DASHBOARD_USERNAME_ADMIN` as email and `DASHBOARD_PASSWORD_ADMIN` as password.
 
 1. Click **Create a new project**, enter a project ID (e.g. `my_study`), choose a model, write a system message and click **Create the project**.
 

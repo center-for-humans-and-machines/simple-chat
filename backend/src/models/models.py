@@ -36,6 +36,10 @@ class Project(Document):
     model: Optional[str] = None
     limits: ProjectLimits = Field(default_factory=ProjectLimits)
 
+    class Settings:
+        # two concurrent registrations cannot both create the project
+        indexes = [pymongo.IndexModel([("project_id", pymongo.ASCENDING)], unique=True)]
+
 
 class LlmCall(Document):
     project_id: str
@@ -99,3 +103,15 @@ class RateLimitWindow(Document):
             ),
             pymongo.IndexModel([("expires_at", pymongo.ASCENDING)], expireAfterSeconds=0),
         ]
+
+
+class Researcher(Document):
+    """A researcher who logs in to the dashboard with email and password."""
+
+    email: str
+    # see src/utils/auth.py hash_password
+    password_hash: str
+    created_at: str
+
+    class Settings:
+        indexes = [pymongo.IndexModel([("email", pymongo.ASCENDING)], unique=True)]

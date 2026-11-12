@@ -16,7 +16,7 @@ import { AuthContext } from "../contexts/AuthContext";
 export default function LoginPage() {
   const navigator = useNavigate();
   const [email, setEmail] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
 
@@ -27,39 +27,33 @@ export default function LoginPage() {
     event.preventDefault();
 
     try {
-      let backendURL =
+      const backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(
-        `${backendURL}/dashboard/login/${email}/${projectId}`
-      );
+      const response = await fetch(`${backendURL}/dashboard/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password })
+      });
 
       if (!response.ok) {
-        setError("Project not found OR Email is wrong.");
         throw new Error("Login failed");
       }
 
       const data = await response.json();
-      console.log(`data`, data);
-      if (data.admin == true) {
-        setAuthData({
-          email: email,
-          admin: true
-        });
-        window.localStorage.setItem("admin", true);
-      } else {
-        setAuthData({
-          email: email,
-          admin: false
-        });
-        window.localStorage.setItem("admin", false);
-      }
-
-      window.localStorage.setItem("email", email);
+      // use the email the token was issued for, so project requests match it
+      const loggedInEmail = data.email || email.trim();
+      setAuthData({
+        email: loggedInEmail,
+        admin: Boolean(data.admin)
+      });
+      window.localStorage.setItem("admin", Boolean(data.admin));
+      window.localStorage.setItem("email", loggedInEmail);
+      window.localStorage.setItem("token", data.token);
       navigator("/");
       // You can save a token or user data in context/localStorage here
     } catch (error) {
       console.error("Error logging in:", error.message);
-      setError("Project not found or Email is wrong.");
+      setError("Email or password is wrong.");
     }
   };
 
@@ -99,10 +93,11 @@ export default function LoginPage() {
               margin="normal"
               required
               fullWidth
-              label="Project ID (admin: password)"
-              type="text"
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
             />
             {error && <Typography color="error">{error}</Typography>}
 

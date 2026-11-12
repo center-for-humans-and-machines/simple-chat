@@ -4,10 +4,13 @@ from datetime import datetime
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
-from fastapi import APIRouter, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 from src.models import get_settings
-from src.models.models import CustomSystemMessage, Project
+from src.models.models import CustomSystemMessage, Project, Researcher
+from src.utils.auth import (PASSWORD_MIN_LENGTH, admin_user, email_query,
+                            hash_password, normalize_email, same_email)
 from src.utils.configs import available_models
 from src.utils.limits import frame_ancestors_policy
 from src.utils.logging import setup_logger
@@ -24,6 +27,8 @@ class ProjectRegisterInput(BaseModel):
     requested_by: str
     system_message: str
     model: Optional[str] = None
+    # required when requested_by has no researcher account yet
+    researcher_password: Optional[str] = None
 
 
 class CustomSystemMessageInput(BaseModel):
@@ -65,7 +70,8 @@ async def embed_policy(
 
 
 @project_router.post("/register")
-async def send_message(data: ProjectRegisterInput):
+async def send_message(data: ProjectRegisterInput, user: dict = Depends(admin_user)):
+    data.requested_by = normalize_email(data.requested_by)
     email_pattern = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
     if not email_pattern.match(data.requested_by):
@@ -83,6 +89,22 @@ async def send_message(data: ProjectRegisterInput):
     if data.model and data.model not in available_models:
         raise HTTPException(status_code=400, detail=f"unknown model: {data.model}")
 
+    # a new researcher gets an account with the password the admin entered
+    new_researcher = None
+    if not same_email(data.requested_by, user["email"]) and not await Researcher.find_one(
+        email_query("email", data.requested_by)
+    ):
+        if not data.researcher_password or len(data.researcher_password) < PASSWORD_MIN_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{data.requested_by} is a new researcher: set a password of at least {PASSWORD_MIN_LENGTH} characters.",
+            )
+        new_researcher = Researcher(
+            email=data.requested_by,
+            password_hash=await hash_password(data.researcher_password),
+            created_at=str(datetime.now()),
+        )
+
     new_project = Project(
         project_id=data.project_id,
         created_by=data.requested_by,
@@ -93,7 +115,19 @@ async def send_message(data: ProjectRegisterInput):
         model=data.model or None,
     )
 
-    await new_project.insert()
+    # the project first, so a failed registration leaves no researcher account behind
+    try:
+        await new_project.insert()
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=400, detail="there is already a project with this project_id"
+        )
+    if new_researcher:
+        try:
+            await new_researcher.insert()
+        except DuplicateKeyError:
+            # a concurrent request created the account; keep its password
+            pass
 
     return {"status": True, "doc_id": new_project.id, "project": new_project}
 

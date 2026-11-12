@@ -13,6 +13,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import { authFetch } from "../authHeaders";
 
 function ProjectPage() {
   const { project_id } = useParams();
@@ -81,7 +82,7 @@ function ProjectPage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/project/${local_project_id}`
         );
 
@@ -102,7 +103,7 @@ function ProjectPage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/conversations/${local_project_id}`
         );
 
@@ -131,7 +132,7 @@ function ProjectPage() {
     try {
       let backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(
+      const response = await authFetch(
         `${backendURL}/dashboard/toggle_status/${projectId}/${oppositeStatus}`
       );
 
@@ -157,7 +158,7 @@ function ProjectPage() {
     try {
       let backendURL =
         process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(
+      const response = await authFetch(
         `${backendURL}/dashboard/toggle_openai_backend/${projectId}/${oppositeStatus}`
       );
 
@@ -183,7 +184,7 @@ function ProjectPage() {
         const backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/update_loading_message`,
           {
             method: "POST",

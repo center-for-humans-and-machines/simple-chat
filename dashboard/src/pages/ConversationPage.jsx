@@ -4,6 +4,7 @@ import { Typography, Container, Box, Paper, Button } from "@mui/material";
 import { useParams } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
 import { UsageStats, UsageByModelTable } from "../components/UsageTables";
+import { authFetch } from "../authHeaders";
 
 function ConversationPage() {
   const { project_id, conversation_id } = useParams();
@@ -35,7 +36,7 @@ function ConversationPage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000"; // process.env.REACT_APP_BACKEND_URL ||
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/conversation/${local_conversation_id}`
         );
 
@@ -55,7 +56,7 @@ function ConversationPage() {
       try {
         let backendURL =
           process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
-        const response = await fetch(
+        const response = await authFetch(
           `${backendURL}/dashboard/usage/${project_id}/conversation/${local_conversation_id}`
         );
 
