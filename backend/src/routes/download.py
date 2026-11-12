@@ -2,8 +2,9 @@
 import io
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from src.models.message import Conversations
+from src.utils.auth import current_user, project_for_user
 from src.utils.db import get_param
 from src.utils.logging import setup_logger
 from starlette.responses import StreamingResponse
@@ -14,16 +15,23 @@ download_router = APIRouter(prefix="/download", tags=["download"])
 
 
 # REST API endpoint to fetch messages for a given session ID
-@download_router.get("/conversation/messages/json/{session_id}")
-async def read_messages(session_id: str):
+async def conversation_for_user(session_id: str, user: dict) -> Conversations:
+    """Return the conversation if the user is the admin or owns its project."""
     conversation_doc = await Conversations.find_one(
         Conversations.conversation_id == session_id
     )
-    if conversation_doc == None:
+    if conversation_doc is None:
         raise HTTPException(
             status_code=404,
             detail=f"Conversation not found with session_id {session_id}",
         )
+    await project_for_user(conversation_doc.project_id, user)
+    return conversation_doc
+
+
+@download_router.get("/conversation/messages/json/{session_id}")
+async def read_messages(session_id: str, user: dict = Depends(current_user)):
+    conversation_doc = await conversation_for_user(session_id, user)
     return conversation_doc.messages
 
 
@@ -71,7 +79,10 @@ async def make_table_for_one_conversation(session_id):
 
 
 @download_router.get("/conversation/{session_id}")
-async def download_csv(session_id: str, response: Response):
+async def download_csv(
+    session_id: str, response: Response, user: dict = Depends(current_user)
+):
+    await conversation_for_user(session_id, user)
     table = await make_table_for_one_conversation(session_id=session_id)
     df = pd.DataFrame(table)
 
