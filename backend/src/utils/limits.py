@@ -218,20 +218,68 @@ async def continues_previous_round(
     project: Project, participant_id, experiment_id, current_round: int
 ) -> bool:
     """True when this start is round 2, 3, ... of a conversation the participant
-    already has, i.e. the previous round exists and the participant wrote in it."""
+    already has: the participant wrote in the previous round and has not yet
+    written in a conversation of this round.
+
+    Only the first conversation of each round continues the earlier one; any
+    further conversation of the same round counts against the cap.
+    """
     if current_round <= 1:
         return False
-    previous = await Conversations.find_one(
+    query = {
+        "project_id": project.project_id,
+        # stored as strings; a missing ID arrives as the integer -1
+        "participant_id": str(participant_id),
+        "experiment_id": str(experiment_id),
+        # page reloads open a new conversation; only those written in count
+        "user_turns": {"$gt": 0},
+    }
+    previous = await Conversations.find_one({**query, "multi_rounds": current_round - 1})
+    if previous is None:
+        return False
+    same_round = await Conversations.find_one({**query, "multi_rounds": current_round})
+    return same_round is None
+
+
+async def count_conversations(project: Project, participant_id) -> int:
+    """Conversations a participant has started, as counted against the cap.
+
+    Rounds 2, 3, ... continue the conversation of round 1, so the first
+    conversation of each later round is not counted; any further one is.
+    """
+    result = await Conversations.find(
         {
             "project_id": project.project_id,
-            # stored as strings; a missing ID arrives as the integer -1
             "participant_id": str(participant_id),
-            "experiment_id": str(experiment_id),
-            "multi_rounds": current_round - 1,
+            # page reloads open a new conversation; only count those the
+            # participant wrote in
             "user_turns": {"$gt": 0},
         }
-    )
-    return previous is not None
+    ).aggregate(
+        [
+            {
+                "$group": {
+                    "_id": {"experiment_id": "$experiment_id", "round": "$multi_rounds"},
+                    "n": {"$sum": 1},
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "count": {
+                        "$sum": {
+                            "$cond": [
+                                {"$gt": ["$_id.round", 1]},
+                                {"$subtract": ["$n", 1]},
+                                "$n",
+                            ]
+                        }
+                    },
+                }
+            },
+        ]
+    ).to_list()
+    return result[0]["count"] if result else 0
 
 
 async def check_start_limits(
@@ -269,17 +317,7 @@ async def check_start_limits(
             project, participant_id, experiment_id, current_round
         )
     ):
-        count = await Conversations.find(
-            {
-                "project_id": project.project_id,
-                "participant_id": participant_id,
-                # page reloads open a new conversation; only count those the
-                # participant wrote in
-                "user_turns": {"$gt": 0},
-                # rounds 2, 3, ... continue the conversation of round 1
-                "multi_rounds": {"$not": {"$gt": 1}},
-            }
-        ).count()
+        count = await count_conversations(project, participant_id)
         if count >= limits.max_conversations_per_participant:
             return "max_conversations_per_participant"
 
