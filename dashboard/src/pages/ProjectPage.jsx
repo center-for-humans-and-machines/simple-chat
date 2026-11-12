@@ -13,6 +13,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import { projectStrings as text } from "../strings";
 
 function ProjectPage() {
   const { project_id } = useParams();
@@ -259,14 +260,13 @@ function ProjectPage() {
         </Button>
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Default model : {projectInfo?.model || "server default"}
+          {text.defaultModel(projectInfo?.model)}
         </Typography>
 
         <hr />
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Embed the chat in your survey (replace PARTICIPANT_ID with your
-          platform's participant variable)
+          {text.embedIntro}
         </Typography>
         <Box
           component="pre"
@@ -286,7 +286,7 @@ function ProjectPage() {
           sx={{ mt: 1, mb: 2, mr: 1 }}
           onClick={() => window.navigator.clipboard.writeText(iframeCode)}
         >
-          Copy iframe code
+          {text.copyIframe}
         </Button>
         <Button
           variant="outlined"
@@ -295,13 +295,13 @@ function ProjectPage() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Open test chat
+          {text.openTestChat}
         </Button>
 
         <hr />
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Token usage, estimated cost and participant limits
+          {text.usageIntro}
         </Typography>
         <Button
           variant="contained"
@@ -310,7 +310,7 @@ function ProjectPage() {
             navigate(`/project/${projectId}/usage`);
           }}
         >
-          Usage & limits
+          {text.usageButton}
         </Button>
 
         <hr />

@@ -4,6 +4,7 @@ import { Typography, Container, Box, Paper, Button } from "@mui/material";
 import { useParams } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
 import { UsageStats, UsageByModelTable } from "../components/UsageTables";
+import { usageStrings } from "../strings";
 
 function ConversationPage() {
   const { project_id, conversation_id } = useParams();
@@ -118,7 +119,7 @@ function ConversationPage() {
         </Typography>
 
         <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-          Token usage
+          {usageStrings.tokenUsage}
         </Typography>
         <UsageStats total={conversationUsage?.total} />
         <UsageByModelTable rows={conversationUsage?.by_model || []} />

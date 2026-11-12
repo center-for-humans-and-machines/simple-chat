@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, IconButton, Popover, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import { infoStrings as text } from "../strings";
 
 // info: { title, what, example, combined }
 function InfoButton({ info }) {
@@ -10,7 +11,7 @@ function InfoButton({ info }) {
     <>
       <IconButton
         size="small"
-        aria-label={`About ${info.title}`}
+        aria-label={text.about(info.title)}
         onClick={e => setAnchorEl(e.currentTarget)}
       >
         <InfoOutlinedIcon fontSize="small" />
@@ -30,13 +31,13 @@ function InfoButton({ info }) {
             {info.what}
           </Typography>
           <Typography variant="overline" color="text.secondary">
-            Example
+            {text.example}
           </Typography>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
             {info.example}
           </Typography>
           <Typography variant="overline" color="text.secondary">
-            Combined with other limits
+            {text.combined}
           </Typography>
           <Typography variant="body2">{info.combined}</Typography>
         </Box>

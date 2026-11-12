@@ -10,6 +10,7 @@ import {
   TableRow,
   Typography
 } from "@mui/material";
+import { usageStrings as text } from "../strings";
 
 export const formatTokens = value => (value || 0).toLocaleString("en-US");
 
@@ -39,15 +40,18 @@ export function UsageStats({ total }) {
   return (
     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 2 }}>
       <UsageStat
-        label="Prompt tokens"
+        label={text.promptTokens}
         value={formatTokens(total?.prompt_tokens)}
       />
       <UsageStat
-        label="Completion tokens"
+        label={text.completionTokens}
         value={formatTokens(total?.completion_tokens)}
       />
-      <UsageStat label="Total tokens" value={formatTokens(total?.total_tokens)} />
-      <UsageStat label="Estimated cost (USD)" value={formatCost(total)} />
+      <UsageStat
+        label={text.totalTokens}
+        value={formatTokens(total?.total_tokens)}
+      />
+      <UsageStat label={text.estimatedCostUsd} value={formatCost(total)} />
     </Box>
   );
 }
@@ -60,18 +64,18 @@ export function UsageByModelTable({ rows }) {
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>Model</TableCell>
-            <TableCell align="right">Calls</TableCell>
-            <TableCell align="right">Prompt</TableCell>
-            <TableCell align="right">Completion</TableCell>
-            <TableCell align="right">Total</TableCell>
-            <TableCell align="right">Est. cost</TableCell>
+            <TableCell>{text.columns.model}</TableCell>
+            <TableCell align="right">{text.columns.calls}</TableCell>
+            <TableCell align="right">{text.columns.prompt}</TableCell>
+            <TableCell align="right">{text.columns.completion}</TableCell>
+            <TableCell align="right">{text.columns.total}</TableCell>
+            <TableCell align="right">{text.columns.estCost}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6}>No usage recorded yet.</TableCell>
+              <TableCell colSpan={6}>{text.noUsage}</TableCell>
             </TableRow>
           )}
           {rows.map(row => (
@@ -90,7 +94,7 @@ export function UsageByModelTable({ rows }) {
                 {formatTokens(row.total_tokens)}
               </TableCell>
               <TableCell align="right" sx={numberCell}>
-                {row.has_unpriced_model ? "n/a" : formatCost(row)}
+                {row.has_unpriced_model ? text.notAvailable : formatCost(row)}
               </TableCell>
             </TableRow>
           ))}

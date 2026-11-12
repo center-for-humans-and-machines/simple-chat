@@ -6,6 +6,7 @@ import React, {
   useRef
 } from "react";
 import ChatContainer from "./ChatContainer";
+import strings from "../strings";
 import ChatInputForm from "./ChatInputForm";
 import { Box } from "@mui/material";
 import { Message } from "../types";
@@ -83,7 +84,7 @@ const ChatPage: React.FC = () => {
         embed_origin: getEmbedOrigin()
       });
     } else {
-      alert("PID is not set.");
+      alert(strings.pidNotSet);
       console.log("pid is not set. params: ", params);
       setIsTyping(true);
     }
@@ -142,11 +143,11 @@ const ChatPage: React.FC = () => {
 
     socket.on("pid_not_found", async data => {
       if (data.message.includes("deactivated")) {
-        alert("This project is deactivated.");
+        alert(strings.projectDeactivated);
       } else if (data.message.includes("not found")) {
-        alert("PID not found.");
+        alert(strings.pidNotFound);
       } else {
-        alert(data.message || "This project is not accessible.");
+        alert(data.message || strings.projectNotAccessible);
       }
       console.log("project with this pid did not found", data);
       setIsTyping(true);
@@ -161,12 +162,10 @@ const ChatPage: React.FC = () => {
       console.log("rate_limited event: ", data);
       if (data.stage === "start") {
         // the conversation was not created, so the page has to be reloaded
-        setLimitMessage(
-          `${data.message} Reload the page in ${data.retry_after} seconds.`
-        );
+        setLimitMessage(strings.reloadAfter(data.message, data.retry_after));
         return;
       }
-      takeBackLastMessage(`${data.message} (${data.retry_after} s)`);
+      takeBackLastMessage(strings.retryAfter(data.message, data.retry_after));
     });
 
     socket.on("message_not_delivered", (data: { message: string }) => {

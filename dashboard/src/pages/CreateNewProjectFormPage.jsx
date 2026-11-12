@@ -11,6 +11,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import PageTracker from "../components/PageTracker";
 import { AuthContext } from "../contexts/AuthContext";
+import { projectStrings } from "../strings";
 
 function CreateNewProjectFormPage() {
   const { authData } = useContext(AuthContext);
@@ -156,11 +157,11 @@ function CreateNewProjectFormPage() {
         />
 
         <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
-          Model
+          {projectStrings.modelHeading}
         </Typography>
         <TextField
           select
-          label="used when the chat URL has no model parameter"
+          label={projectStrings.modelLabel}
           variant="outlined"
           fullWidth
           value={modelOptions.includes(model) ? model : ""}
