@@ -17,6 +17,8 @@ services:
     environment:
       - REACT_APP_BACKEND_URL=http://localhost:8000
       - NODE_ENV=development
+      - SENTRY_ENABLED=${SENTRY_ENABLED:-false}
+      - SENTRY_DSN=${FRONTEND_SENTRY_DSN:-}
     networks:
       - frontend-backend
     restart: always
