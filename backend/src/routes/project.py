@@ -99,7 +99,7 @@ async def send_message(data: ProjectRegisterInput, user: dict = Depends(admin_us
             )
         new_researcher = Researcher(
             email=data.requested_by,
-            password_hash=hash_password(data.researcher_password),
+            password_hash=await hash_password(data.researcher_password),
             created_at=str(datetime.now()),
         )
 

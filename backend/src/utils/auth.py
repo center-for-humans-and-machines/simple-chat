@@ -6,6 +6,7 @@ DASHBOARD_TOKEN_SECRET, so only the backend can issue one. It is kept apart
 from DASHBOARD_PASSWORD_ADMIN so that a researcher's token cannot be used to
 guess the admin password offline.
 """
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -24,19 +25,29 @@ PASSWORD_MIN_LENGTH = 8
 PASSWORD_ITERATIONS = 600_000
 
 
-def hash_password(password: str) -> str:
+# PBKDF2 takes about half a second, so the async wrappers below run it in a
+# worker thread instead of blocking the event loop (and every live chat).
+def _hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), PASSWORD_ITERATIONS)
     return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${salt}${digest.hex()}"
 
 
-def verify_password(password: str, password_hash: str) -> bool:
+def _verify_password(password: str, password_hash: str) -> bool:
     try:
         _, iterations, salt, expected = password_hash.split("$")
         digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(iterations))
     except ValueError:
         return False
     return hmac.compare_digest(digest.hex(), expected)
+
+
+async def hash_password(password: str) -> str:
+    return await asyncio.to_thread(_hash_password, password)
+
+
+async def verify_password(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(_verify_password, password, password_hash)
 
 
 def is_admin_login(email: str, password: str) -> bool:
@@ -50,7 +61,7 @@ async def authenticate(email: str, password: str) -> Optional[dict]:
     if is_admin_login(email, password):
         return {"email": email, "admin": True}
     researcher = await Researcher.find_one({"email": email})
-    if researcher and verify_password(password, researcher.password_hash):
+    if researcher and await verify_password(password, researcher.password_hash):
         return {"email": email, "admin": False}
     return None
 

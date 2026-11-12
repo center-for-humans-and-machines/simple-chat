@@ -83,14 +83,14 @@ async def set_researcher_password(
 
     researcher = await Researcher.find_one({"email": email})
     if researcher:
-        researcher.password_hash = hash_password(data.password)
+        researcher.password_hash = await hash_password(data.password)
         await researcher.save()
     else:
         if not await Project.find_one({"created_by": email}):
             raise HTTPException(status_code=404, detail="researcher not found")
         await Researcher(
             email=email,
-            password_hash=hash_password(data.password),
+            password_hash=await hash_password(data.password),
             created_at=str(datetime.now()),
         ).insert()
 
