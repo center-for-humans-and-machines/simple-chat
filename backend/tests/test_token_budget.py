@@ -4,9 +4,11 @@ from types import SimpleNamespace
 import pytest
 from src.models.models import TokenBudget
 from src.utils import llm_model
-from src.utils.limits import MAX_COMPLETION_TOKENS, release_tokens, reserve_tokens
+from src.utils.limits import (MAX_COMPLETION_TOKENS, MAX_REASONING_COMPLETION_TOKENS,
+                              release_tokens, reserve_tokens)
 from src.utils.llm_model import (DEFAULT_IMAGE_TOKENS, IMAGE_TOKENS, call_model,
-                                 estimate_prompt_tokens, num_tokens_from_string)
+                                 count_prompt_tokens, estimate_prompt_tokens,
+                                 num_tokens_from_string)
 from src.utils.usage import record_usage
 
 
@@ -231,10 +233,9 @@ async def test_image_chat_call_reserves_and_records_the_image(make_project, no_i
 
     prompt = estimate_prompt_tokens([IMAGE_MESSAGE], "gpt-4o")
     assert client.calls[0]["max_tokens"] == 2000 - prompt
-    # usage is recorded and settled with the same estimate that was reserved
-    assert await budget(f"project:{project.project_id}") == prompt + num_tokens_from_string(
-        "a cat "
-    )
+    # the reservation is the upper bound; the plain count is what gets recorded
+    recorded = count_prompt_tokens([IMAGE_MESSAGE], "gpt-4o") + num_tokens_from_string("a cat ")
+    assert await budget(f"project:{project.project_id}") == recorded
 
 
 async def test_prompt_of_many_short_messages_is_not_underestimated(make_project):
@@ -257,4 +258,28 @@ async def test_reply_counted_longer_than_max_tokens_stays_within_the_cap(make_pr
 
     await chat_call(project, client, FakeSio())
 
-    assert await budget(f"project:{project.project_id}") == 60
+    assert await budget(f"project:{project.project_id}") <= 60
+
+
+async def test_reasoning_models_get_room_for_reasoning(make_project):
+    project = await make_project(max_tokens_per_project=1_000_000)
+
+    reservation, _ = await reserve_tokens(project, 10, model="gpt-5.1")
+
+    assert reservation.max_tokens == MAX_REASONING_COMPLETION_TOKENS > MAX_COMPLETION_TOKENS
+
+
+async def test_losing_every_race_is_busy_not_a_reached_cap(make_project, monkeypatch):
+    from src.utils import limits
+
+    project = await make_project(max_tokens_per_project=1_000_000)
+    monkeypatch.setattr(limits, "RESERVE_BACKOFF_SECONDS", 0)
+
+    async def always_lose(key, amount, cap=None):
+        return cap is None
+
+    monkeypatch.setattr(limits, "_add_tokens", always_lose)
+
+    reservation, reason = await reserve_tokens(project, 10)
+
+    assert reservation is None and reason == limits.BUSY

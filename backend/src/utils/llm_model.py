@@ -11,7 +11,8 @@ from src.models.models import Project
 from src.models.settings import get_settings
 from src.utils.configs import is_reasoning_model, models
 from src.utils.db import create_message
-from src.utils.limits import limit_message, release_tokens, reserve_tokens
+from src.utils.limits import (BUSY, BUSY_MESSAGE, limit_message, release_tokens,
+                              reserve_tokens)
 from src.utils.logging import setup_logger
 from src.utils.usage import record_usage
 from tenacity import retry, stop_after_attempt, wait_random_exponential
@@ -45,25 +46,29 @@ else:
 async def completion_with_backoff(client, **kwargs):
     # logger.info("here in completion_with_backoff")
     # return await client.chat.completions.create(**kwargs)
+    # Parameters newer than the pinned openai SDK go in extra_body.
+    extra_body = dict(kwargs.pop("extra_body", None) or {})
     if is_reasoning_model(kwargs["model"]):
         # Reasoning models reject `temperature`; they only use their default sampling.
         kwargs.pop("temperature", None)
         if settings.openai_reasoning_effort:
-            # Sent as extra_body because the pinned openai SDK predates this parameter.
-            kwargs["extra_body"] = {
-                **kwargs.get("extra_body", {}),
-                "reasoning_effort": settings.openai_reasoning_effort,
-            }
+            extra_body["reasoning_effort"] = settings.openai_reasoning_effort
+        # They reject max_tokens and take max_completion_tokens, which also
+        # bounds the hidden reasoning tokens.
+        if "max_tokens" in kwargs:
+            extra_body["max_completion_tokens"] = kwargs.pop("max_tokens")
     if (
         f"together_ai-{kwargs['model']}" in models["together_ai"]
         and settings.together_ai_reasoning_effort
     ):
         # Hybrid open-weights models (e.g. DeepSeek-V4.1-Flash) think by default;
         # "none" switches thinking off.
-        kwargs["extra_body"] = {
-            **kwargs.get("extra_body", {}),
-            "reasoning_effort": settings.together_ai_reasoning_effort,
-        }
+        extra_body["reasoning_effort"] = settings.together_ai_reasoning_effort
+    if kwargs.get("stream") and reports_stream_usage(client):
+        # the last chunk then carries the provider's `usage`
+        extra_body["stream_options"] = {"include_usage": True}
+    if extra_body:
+        kwargs["extra_body"] = extra_body
     # On Azure the request names a deployment, which may differ from the model name.
     deployments = getattr(client, "azure_deployments", None)
     if deployments:
@@ -74,6 +79,31 @@ async def completion_with_backoff(client, **kwargs):
     except Exception as e:
         logger.error("Error occurred in completion_with_backoff: %s", str(e))
         raise  # Re-raise exception after logging it
+
+
+# Azure accepts stream_options from this API version on; older versions reject it.
+AZURE_STREAM_USAGE_API_VERSION = "2024-09-01"
+
+
+def reports_stream_usage(client) -> bool:
+    if isinstance(client, AsyncAzureOpenAI):
+        return settings.azure_openai_api_version >= AZURE_STREAM_USAGE_API_VERSION
+    return True
+
+
+def usage_counts(usage):
+    """(prompt, completion) tokens of a provider `usage`, which the pinned SDK
+    may leave as a plain dict on streamed chunks; None when it is missing."""
+    if usage is None:
+        return None
+    if isinstance(usage, dict):
+        prompt, completion = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    else:
+        prompt = getattr(usage, "prompt_tokens", None)
+        completion = getattr(usage, "completion_tokens", None)
+    if prompt is None or completion is None:
+        return None
+    return prompt, completion
 
 
 def init_model_endpoint(
@@ -182,8 +212,23 @@ async def call_model(
         project = await Project.find_one({"project_id": project_id})
         if project is not None:
             reservation, reason = await reserve_tokens(
-                project, prompt_estimate, conversation_id=session_id
+                project, prompt_estimate, conversation_id=session_id, model=model
             )
+            if reason == BUSY:
+                # concurrent calls kept taking the room; the cap is not reached
+                logger.info(f"Participant {participant_id} not served: token budget busy")
+                await sio_server.emit(
+                    "message_to_client",
+                    {
+                        "type": "message",
+                        "data": await create_message(content=BUSY_MESSAGE, role="assistant"),
+                    },
+                    sid,
+                )
+                await sio_server.emit(
+                    "message_end", {"session_id": session_id, "status": "error"}, sid
+                )
+                return "ExceptionError"  # the reply is not generated and not saved
             if reason:
                 logger.info(f"Participant {participant_id} blocked by project limit: {reason}")
                 await sio_server.emit(
@@ -202,23 +247,30 @@ async def call_model(
             estimate = min(estimate, completion_kwargs["max_tokens"])
         return estimate
 
-    async def record_call_usage(completion_tokens: int):
+    async def record_call_usage():
         if project_id is None:
             return
-        # streamed responses carry no `usage` with the pinned openai client,
-        # so these counts are tiktoken estimates
+        # The reservation used an upper bound; record the provider's count, or
+        # without one a plain tiktoken count, so dashboards and caps see real use.
+        counts = usage_counts(provider_usage)
+        if counts is not None:
+            prompt_tokens, completion_tokens = counts
+        else:
+            prompt_tokens = count_prompt_tokens(messages, model)
+            completion_tokens = completion_estimate_for(full_response)
         await record_usage(
             project_id=project_id,
             model=model,
-            prompt_tokens=prompt_estimate,
+            prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            estimated=True,
+            estimated=counts is None,
             conversation_id=session_id,
             participant_id=participant_id,
         )
 
     status = "ok"
     response = None
+    provider_usage = None
     full_response = ""
     usage_recorded = False
     try:
@@ -234,6 +286,7 @@ async def call_model(
         if stream:
             new_message = True
             async for chunk in response:
+                provider_usage = getattr(chunk, "usage", None) or provider_usage
                 if len(chunk.choices) == 0:
                     continue
                 text_to_send_in_the_current_chunk = chunk.choices[0].delta.content or ""
@@ -250,6 +303,7 @@ async def call_model(
                 await sio_server.emit("message_to_client", response_data, sid)
         else:
             full_response = response.choices[0].message.content or ""
+            provider_usage = getattr(response, "usage", None)
             response_data = {
                 "type": "message",
                 "data": await create_message(
@@ -262,7 +316,7 @@ async def call_model(
         response_token_count = num_tokens_from_string(full_response)
         total_token_count = request_token_count + response_token_count
 
-        await record_call_usage(completion_estimate_for(full_response))
+        await record_call_usage()
         usage_recorded = True
 
         if total_token_count > token_count_limit:
@@ -283,7 +337,7 @@ async def call_model(
             # The provider accepted the call, so it bills the prompt and the
             # reply streamed before the failure; record them and keep them
             # in the budgets instead of releasing the whole reservation.
-            await record_call_usage(completion_estimate_for(full_response))
+            await record_call_usage()
         response_data = {
             "type": "message",
             "data": await create_message(
@@ -356,10 +410,13 @@ def _text_margin(model: str) -> float:
     return OPENAI_TEXT_MARGIN if model in models["openai"] else OTHER_TEXT_MARGIN
 
 
-def estimate_prompt_tokens(messages: list, model: str, extra: str = "") -> int:
+def estimate_prompt_tokens(
+    messages: list, model: str, extra: str = "", margin: bool = True
+) -> int:
     """Upper bound on the prompt tokens a provider counts for these messages.
 
     Used to reserve token budget before a call, so it errs on the high side.
+    Without `margin` the text is counted as tiktoken counts it.
     """
     model = model.replace("together_ai-", "")
     text_tokens = num_tokens_from_string(extra)
@@ -376,7 +433,17 @@ def estimate_prompt_tokens(messages: list, model: str, extra: str = "") -> int:
             text_tokens += num_tokens_from_string(str(content))
 
     overhead = REPLY_OVERHEAD_TOKENS + MESSAGE_OVERHEAD_TOKENS * len(messages)
-    return math.ceil(text_tokens * _text_margin(model)) + image_tokens + overhead
+    factor = _text_margin(model) if margin else 1.0
+    return math.ceil(text_tokens * factor) + image_tokens + overhead
+
+
+def count_prompt_tokens(messages: list, model: str) -> int:
+    """Prompt tokens to record when the provider reports no usage.
+
+    The text is counted without the reservation's margin; images keep their
+    most expensive size, since the size the provider billed is unknown.
+    """
+    return estimate_prompt_tokens(messages, model, margin=False)
 
 
 def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:

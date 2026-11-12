@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from src.models.models import LlmCall, Project
 from src.utils.helpers import get_openai_backend
-from src.utils.limits import release_tokens, reserve_tokens
+from src.utils.limits import BUSY, release_tokens, reserve_tokens
 from src.utils.llm_model import (completion_with_backoff,
                                  estimate_prompt_tokens, init_model_endpoint)
 from src.utils.logging import setup_logger
@@ -34,8 +34,12 @@ async def call_within_token_cap(
     The usage the provider reports is recorded before the reservation is released.
     """
     reservation, reason = await reserve_tokens(
-        project, estimate_prompt_tokens(messages, model, extra_prompt)
+        project, estimate_prompt_tokens(messages, model, extra_prompt), model=model
     )
+    if reason == BUSY:
+        raise HTTPException(
+            status_code=503, detail="busy, try again", headers={"Retry-After": "1"}
+        )
     if reason:
         raise HTTPException(status_code=429, detail="project token limit reached")
 

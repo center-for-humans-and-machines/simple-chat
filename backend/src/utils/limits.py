@@ -1,3 +1,5 @@
+import asyncio
+import random
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
@@ -6,12 +8,17 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from src.models.message import Conversations
 from src.models.models import Project, RateLimitWindow, TokenBudget, TokenUsage
+from src.utils.configs import is_reasoning_model
 
 # Messages shown to participants. They deliberately do not say which limit was hit.
 NOT_ALLOWED_MESSAGE = "You are not registered for this study, so the chat is not available."
 LIMIT_REACHED_MESSAGE = "This conversation has reached its limit and has ended. Thank you for participating."
 EMBED_NOT_ALLOWED_MESSAGE = "This chat cannot be used on this website."
 RATE_LIMITED_MESSAGE = "You are sending messages too quickly. Please wait a moment and try again."
+BUSY_MESSAGE = "The chat is busy right now. Please send your message again."
+
+# reserve_tokens result when concurrent calls kept taking the room: not a reached cap
+BUSY = "busy"
 
 
 async def used_tokens(query: dict) -> int:
@@ -41,15 +48,21 @@ async def project_token_cap_reached(project: Project) -> bool:
 # Longest reply a call may generate while a token cap is set. A call near the
 # cap gets a shorter limit, so it cannot generate past the cap.
 MAX_COMPLETION_TOKENS = 4096
-# How often to retry a reservation that lost a race with a concurrent call.
-RESERVE_ATTEMPTS = 3
+# Reasoning models count their hidden reasoning against the same limit, so
+# they get room for it on top of the reply.
+MAX_REASONING_COMPLETION_TOKENS = 4 * MAX_COMPLETION_TOKENS
+# How often to retry a reservation that lost a race with a concurrent call,
+# waiting a little longer each time.
+RESERVE_ATTEMPTS = 8
+RESERVE_BACKOFF_SECONDS = 0.02
 
 
 @dataclass
 class TokenReservation:
     # (budget key, reserved tokens) for every cap the call counts against
     holds: List[Tuple[str, int]] = field(default_factory=list)
-    # passed to the provider as max_tokens; None when no token cap is set
+    # passed to the provider as max_tokens (max_completion_tokens for
+    # reasoning models); None when no token cap is set
     max_tokens: Optional[int] = None
 
 
@@ -125,11 +138,15 @@ async def _add_tokens(key: str, amount: int, cap: Optional[int] = None) -> bool:
 
 
 async def reserve_tokens(
-    project: Project, prompt_tokens: int, conversation_id: Optional[str] = None
+    project: Project,
+    prompt_tokens: int,
+    conversation_id: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> Tuple[Optional[TokenReservation], Optional[str]]:
     """Reserve the prompt and a bounded reply against the project and conversation token caps.
 
-    Return the reservation, or the name of the cap that leaves no room for a reply.
+    Return the reservation, or the name of the cap that leaves no room for a reply,
+    or BUSY when concurrent calls kept taking the room; BUSY is worth retrying.
     The caller passes reservation.max_tokens to the provider, records the usage of
     the call, and then calls release_tokens.
     """
@@ -137,8 +154,14 @@ async def reserve_tokens(
     if not caps:
         return TokenReservation(), None
 
-    for _ in range(RESERVE_ATTEMPTS):
-        max_tokens = MAX_COMPLETION_TOKENS
+    max_reply = MAX_COMPLETION_TOKENS
+    if model is not None and is_reasoning_model(model.replace("together_ai-", "")):
+        max_reply = MAX_REASONING_COMPLETION_TOKENS
+
+    for attempt in range(RESERVE_ATTEMPTS):
+        if attempt:
+            await asyncio.sleep(random.uniform(0, RESERVE_BACKOFF_SECONDS * attempt))
+        max_tokens = max_reply
         for key, cap, usage_query, reason in caps:
             room = cap - await _budget_tokens(key, usage_query) - prompt_tokens
             if room < 1:
@@ -158,7 +181,7 @@ async def reserve_tokens(
         for key, held in holds:
             await _add_tokens(key, -held)
 
-    return None, caps[0][3]
+    return None, BUSY
 
 
 async def release_tokens(reservation: Optional[TokenReservation]):
