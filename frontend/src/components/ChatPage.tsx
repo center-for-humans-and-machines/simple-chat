@@ -1,5 +1,12 @@
-import React, { useState, ChangeEvent, FormEvent, useEffect } from "react";
+import React, {
+  useState,
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useRef
+} from "react";
 import ChatContainer from "./ChatContainer";
+import strings from "../strings";
 import ChatInputForm from "./ChatInputForm";
 import { Box } from "@mui/material";
 import { Message } from "../types";
@@ -11,6 +18,22 @@ const shouldShowChatInput = (): boolean => {
   return searchParams.get("chat_input") !== "false";
 };
 
+// origin of the page embedding the chat; null when not embedded or unknown
+const getEmbedOrigin = (): string | null => {
+  if (window.self === window.top) {
+    return null;
+  }
+  const ancestors = window.location.ancestorOrigins;
+  if (ancestors && ancestors.length > 0) {
+    return ancestors[0];
+  }
+  try {
+    return document.referrer ? new URL(document.referrer).origin : null;
+  } catch {
+    return null;
+  }
+};
+
 const ChatPage: React.FC = () => {
   const [sessionId, setSessionId] = useState("");
   const [participantId, setParticipantId] = useState("");
@@ -19,6 +42,11 @@ const ChatPage: React.FC = () => {
 
   const [newMessage, setNewMessage] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(true);
+  // set when a project limit ends the conversation; the input stays closed
+  const [limitMessage, setLimitMessage] = useState<string>("");
+  // set when a message was rejected by the rate limit; cleared on the next send
+  const [notice, setNotice] = useState<string>("");
+  const lastSentText = useRef<string>("");
   const [imageFile, setImageFile] = useState(null);
 
   const [urlParams, setUrlParams] = useState<{ [key: string]: any }>({});
@@ -52,13 +80,22 @@ const ChatPage: React.FC = () => {
     if ("pid" in params) {
       await socket.emit("initial_message_to_server", {
         data: params,
-        session_id: sessionId
+        session_id: sessionId,
+        embed_origin: getEmbedOrigin()
       });
     } else {
-      alert("PID is not set.");
+      alert(strings.pidNotSet);
       console.log("pid is not set. params: ", params);
       setIsTyping(true);
     }
+  };
+
+  // the message was not stored: take it back so it can be sent again
+  const takeBackLastMessage = (notice: string) => {
+    setMessages(prevMessages => prevMessages.slice(0, -1));
+    setNewMessage(lastSentText.current);
+    setNotice(notice);
+    setIsTyping(false);
   };
 
   useEffect(() => {
@@ -70,9 +107,14 @@ const ChatPage: React.FC = () => {
 
     socket.on("session_id", async data => {
       console.log("session_id event: ", data);
-      setIsTyping(false); // user can send message after getting the session id.
+      // sending stays disabled until the backend has created the conversation
       setSessionId(data.session_id);
       await sending_initial_message(data.session_id);
+    });
+
+    socket.on("conversation_ready", (data: { session_id: string }) => {
+      console.log("conversation_ready event: ", data);
+      setIsTyping(false); // user can send messages once the conversation exists.
     });
 
     socket.on("set_participant_id", data => {
@@ -101,14 +143,34 @@ const ChatPage: React.FC = () => {
 
     socket.on("pid_not_found", async data => {
       if (data.message.includes("deactivated")) {
-        alert("This project is deactivated.");
+        alert(strings.projectDeactivated);
       } else if (data.message.includes("not found")) {
-        alert("PID not found.");
+        alert(strings.pidNotFound);
       } else {
-        alert("This project is not accessible.");
+        alert(data.message || strings.projectNotAccessible);
       }
       console.log("project with this pid did not found", data);
       setIsTyping(true);
+    });
+
+    socket.on("limit_reached", data => {
+      console.log("limit_reached event: ", data);
+      setLimitMessage(data.message);
+    });
+
+    socket.on("rate_limited", data => {
+      console.log("rate_limited event: ", data);
+      if (data.stage === "start") {
+        // the conversation was not created, so the page has to be reloaded
+        setLimitMessage(strings.reloadAfter(data.message, data.retry_after));
+        return;
+      }
+      takeBackLastMessage(strings.retryAfter(data.message, data.retry_after));
+    });
+
+    socket.on("message_not_delivered", (data: { message: string }) => {
+      console.log("message_not_delivered event: ", data);
+      takeBackLastMessage(data.message);
     });
 
     socket.on("project_info", data => {
@@ -126,8 +188,8 @@ const ChatPage: React.FC = () => {
   };
 
   const handleSendClick = async () => {
-    // Check if newMessage length is greater than 0
-    if (newMessage.length === 0) {
+    // Check if newMessage length is greater than 0, and that sending is enabled
+    if (newMessage.length === 0 || isTyping) {
       return;
     }
 
@@ -135,6 +197,8 @@ const ChatPage: React.FC = () => {
       role: "user",
       content: newMessage
     };
+    lastSentText.current = newMessage;
+    setNotice("");
 
     if (imageFile) {
       message = {
@@ -239,14 +303,16 @@ const ChatPage: React.FC = () => {
             marginBottom: "0.65rem"
           }}
         >
-          {isTyping && (
+          {limitMessage && <span>{limitMessage}</span>}
+          {notice && !limitMessage && !isTyping && <span>{notice}</span>}
+          {isTyping && !limitMessage && (
             <>
               <span>{projectInfo?.loading_message}</span>
               <BlinkingDots />
             </>
           )}
         </div>
-        {showChatInput && (
+        {showChatInput && !limitMessage && (
           <ChatInputForm
             newMessage={newMessage}
             handleInputChange={handleInputChange}

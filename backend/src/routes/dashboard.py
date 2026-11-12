@@ -1,12 +1,18 @@
 # routes.py
 import os
+import re
 
 from fastapi import APIRouter, Body, HTTPException
 from src.models.message import Conversations
-from src.models.models import Project
+from src.models.models import Project, ProjectLimits
+from src.utils.configs import model_prices
 from src.utils.logging import setup_logger
+from src.utils.usage import summarize_usage
 
 logger = setup_logger(__name__)
+
+# scheme, host (optionally starting with *.) and port, as allowed in frame-ancestors
+EMBED_ORIGIN_PATTERN = re.compile(r"^https?://(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*(:\d+)?$")
 
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -116,3 +122,63 @@ async def update_loading_message(
     await project.save()
 
     return {"status": True, "updated_loading_message": project.loading_message}
+
+
+@dashboard_router.get("/usage/{project_id}")
+async def project_usage(project_id: str):
+    summary = await summarize_usage({"project_id": project_id})
+    return {"project_id": project_id, "prices": model_prices, **summary}
+
+
+@dashboard_router.get("/usage/{project_id}/conversation/{conversation_id}")
+async def conversation_usage(project_id: str, conversation_id: str):
+    summary = await summarize_usage(
+        {"project_id": project_id, "conversation_id": conversation_id}
+    )
+    return {
+        "conversation_id": conversation_id,
+        "total": summary["total"],
+        "by_model": summary["by_model"],
+    }
+
+
+@dashboard_router.get("/limits/{project_id}")
+async def get_limits(project_id: str):
+    project = await Project.find_one({"project_id": project_id})
+
+    if not project:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    return project.limits
+
+
+@dashboard_router.put("/limits/{project_id}")
+async def update_limits(project_id: str, limits: ProjectLimits):
+    project = await Project.find_one({"project_id": project_id})
+
+    if not project:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    limits.participant_allowlist = sorted(
+        {pid.strip() for pid in limits.participant_allowlist if pid.strip()}
+    )
+    limits.allowed_embed_origins = sorted(
+        {
+            origin.strip().lower().rstrip("/")
+            for origin in limits.allowed_embed_origins
+            if origin.strip()
+        }
+    )
+    for origin in limits.allowed_embed_origins:
+        if not EMBED_ORIGIN_PATTERN.match(origin):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"invalid embedding origin: {origin} "
+                    "(expected e.g. https://example.com or https://*.example.com)"
+                ),
+            )
+    project.limits = limits
+    await project.save()
+
+    return project.limits
