@@ -44,7 +44,7 @@
     "parcel": "^2.16.1",
     "prop-types": "^15.8.1",
     "socket.io-client": "^4.8.1",
-    "typescript": "^5.0.4"
+    "typescript": "^7.0.2"
   },
   "jest": {
     "testEnvironment": "jsdom",
