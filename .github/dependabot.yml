@@ -37,6 +37,11 @@ updates:
     cooldown:
       default-days: 7
     assignees: [rodrigobdz, alidasmeh]
+    ignore:
+      # Babel 8 needs every @babel package upgraded together; one-package
+      # bumps fail to install against @babel/core 7 (#44).
+      - dependency-name: "@babel/*"
+        update-types: [version-update:semver-major]
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
@@ -67,6 +72,11 @@ updates:
     cooldown:
       default-days: 7
     assignees: [rodrigobdz, alidasmeh]
+    ignore:
+      # backend/pyproject.toml supports Python <3.14, and the dependencies
+      # fail to build on 3.15 (#39).
+      - dependency-name: python
+        versions: [">=3.14"]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
