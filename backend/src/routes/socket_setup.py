@@ -10,6 +10,7 @@ from src.utils.db import create_image, create_message
 from src.utils.helpers import (create_system_message_based_on_prev_rounds,
                                get_custom_system_message, get_openai_backend,
                                get_or_create_participant, get_response,
+                               id_as_string,
                                parse_stream_flag, store_search_parameters,
                                upload)
 from src.utils.llm_model import init_model_endpoint
@@ -94,10 +95,10 @@ async def initial_message_to_server(sid, data):
         )
     ]
 
-    experiment_id_name = (
+    experiment_id_name = id_as_string(
         data["data"]["experiment_id"] if "experiment_id" in data["data"] else "-1"
     )
-    participant_id = (
+    participant_id = id_as_string(
         data["data"]["participant_id"]
         if "participant_id" in data["data"]
         else "-1"  # why we are not putting a random value here?

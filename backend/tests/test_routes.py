@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from src.main import app
 from src.models.models import Project
 
@@ -18,6 +19,16 @@ async def test_health_endpoint():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_startup_initialises_the_database(monkeypatch):
+    init_db = AsyncMock()
+    monkeypatch.setattr("src.main.init_db", init_db)
+
+    with TestClient(app):
+        pass
+
+    init_db.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The frontend runs on React 19, up from React 18, and no longer installs
+  the unused `react-query` package (SIM-84)
 - The backend uses Beanie 2 and PyMongo's async client, up from Beanie 1.30
   with Motor (SIM-83)
 - The backend runs on Pydantic 2 and FastAPI 0.162, up from Pydantic 1.10
@@ -24,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `POST /llm/json_call` returns the model's JSON reply and stores the call;
   before, every request to a valid project failed with a 500 error (SIM-81)
+- The chat backend accepts `participant_id` and `experiment_id` sent as
+  numbers again and treats them as strings, also when it looks up a
+  blacklisted participant or the previous round; since the Pydantic 2 upgrade
+  a number failed validation and no conversation was created (SIM-82)
 
 ### Security
 
