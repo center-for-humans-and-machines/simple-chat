@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import List, Literal, Optional, TypedDict
+from typing import List, Literal, Optional
 
 from beanie import Document
 from pydantic import Field
+from typing_extensions import TypedDict
 
 
 class OpenAIMessage(TypedDict):
