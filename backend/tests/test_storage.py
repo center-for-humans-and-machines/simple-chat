@@ -4,29 +4,10 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from conftest import RESEARCHER, register_project
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from openai.types.chat.chat_completion import Choice
+from conftest import RESEARCHER, make_completion, register_project
 from src.models.message import Conversations, Participant
 from src.models.models import LlmCall
 from src.routes import llm, socket_setup
-
-
-def make_completion(content: str) -> ChatCompletion:
-    """Return an OpenAI chat completion with one assistant message."""
-    return ChatCompletion(
-        id="completion",
-        created=0,
-        model="gpt-4o",
-        object="chat.completion",
-        choices=[
-            Choice(
-                index=0,
-                finish_reason="stop",
-                message=ChatCompletionMessage(role="assistant", content=content),
-            )
-        ],
-    )
 
 
 @pytest.mark.asyncio

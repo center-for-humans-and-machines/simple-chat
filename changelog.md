@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `POST /llm/json_call` returns the model's JSON reply and stores the call;
+  before, every request to a valid project failed with a 500 error (SIM-81)
+
 ### Security
 
 ### Removed
