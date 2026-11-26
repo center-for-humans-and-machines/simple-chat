@@ -42,6 +42,11 @@ updates:
       # bumps fail to install against @babel/core 7 (#44).
       - dependency-name: "@babel/*"
         update-types: [version-update:semver-major]
+      # typescript-eslint 8 supports TypeScript below 6.1 only; with
+      # TypeScript 7 eslint fails to load the plugin (#46). Remove once
+      # typescript-eslint/typescript-eslint#10940 is released.
+      - dependency-name: typescript
+        versions: [">=6.1.0"]
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
