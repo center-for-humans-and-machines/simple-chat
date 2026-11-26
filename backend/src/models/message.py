@@ -30,7 +30,7 @@ class Conversations(Document):
     created_at: str
     participant_id: str
     experiment_id: str
-    model: str = Field(..., env="MODEL")
+    model: str
     messages: List[ConversationMessage] = Field(default_factory=list)
     project_id: str
     custom_system_message_id: Optional[str] = None

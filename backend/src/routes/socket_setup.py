@@ -44,7 +44,7 @@ async def initial_message_to_server(sid, data):
         )
         return
     else:
-        if "active" in project[0].dict():
+        if "active" in project[0].model_dump():
             if project[0].active == False:
                 await sio_server.emit(
                     "pid_not_found",
@@ -95,12 +95,12 @@ async def initial_message_to_server(sid, data):
     ]
 
     experiment_id_name = (
-        data["data"]["experiment_id"] if "experiment_id" in data["data"] else -1
+        data["data"]["experiment_id"] if "experiment_id" in data["data"] else "-1"
     )
     participant_id = (
         data["data"]["participant_id"]
         if "participant_id" in data["data"]
-        else -1  # why we are not putting a random value here?
+        else "-1"  # why we are not putting a random value here?
     )
 
     await sio_server.emit("set_participant_id", {"participant_id": participant_id}, sid)
