@@ -1,9 +1,9 @@
-import motor.motor_asyncio
 import sentry_sdk
 from beanie import init_beanie
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langfuse import Langfuse
+from pymongo import AsyncMongoClient
 from src.models import __beanie_models__, get_settings
 from src.routes.dashboard import dashboard_router
 from src.routes.download import download_router
@@ -65,7 +65,7 @@ async def health() -> dict[str, str]:
 # Initialize database
 async def init_db():
     # Create an asynchronous MongoDB client
-    client = motor.motor_asyncio.AsyncIOMotorClient(settings.mongo_url)
+    client = AsyncMongoClient(settings.mongo_url)
     database = client[settings.database_name]
 
     # Initialize Beanie ODM with the MongoDB database
