@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "",
   "source": "public/index.html",
+  "@parcel/resolver-default": {
+    "packageExports": true
+  },
   "scripts": {
     "start": "parcel --no-hmr",
     "build": "parcel build",
