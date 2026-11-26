@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Literal, Optional
 
 from beanie import Document
-from pydantic import Field
+from pydantic import ConfigDict, Field
 from typing_extensions import TypedDict
 
 
@@ -25,7 +25,15 @@ class ConversationMessage(TypedDict):
     type: Literal["image", "text"]
 
 
+# The chat socket passes participant and experiment IDs through untyped, so a
+# client may send them as numbers. Pydantic rejects a number for a `str` field
+# unless this is set.
+NUMBERS_AS_STRINGS = ConfigDict(coerce_numbers_to_str=True)
+
+
 class Conversations(Document):
+    model_config = NUMBERS_AS_STRINGS
+
     conversation_id: str
     created_at: str
     participant_id: str
@@ -48,6 +56,8 @@ class SearchParameters(Document):
 
 
 class Participant(Document):
+    model_config = NUMBERS_AS_STRINGS
+
     participant_id: str
     black_listed: bool = Field(default=False)
 

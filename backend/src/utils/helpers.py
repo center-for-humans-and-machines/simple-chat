@@ -37,7 +37,26 @@ async def store_search_parameters(search_params_data, session_id):
     await search_params.insert()
 
 
+def id_as_string(value):
+    """Return a participant or experiment ID sent as a number as a string.
+
+    The documents store these IDs as strings, so a lookup with the number
+    would not match.
+
+    Args:
+        value: The ID as it arrived in the socket payload.
+
+    Returns:
+        The ID as a string if it was an int or a float, else the value unchanged.
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return value
+
+
 async def get_or_create_participant(participant_id: str) -> (Participant, bool):
+    participant_id = id_as_string(participant_id)
+
     # Check if the participant exists
     participant = await Participant.find_one({"participant_id": participant_id})
 
