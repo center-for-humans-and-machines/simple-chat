@@ -43,14 +43,17 @@ Simple Chat comes in two flavors:
 - **Self-hosted Simple Chat (this repository)** — the open-source, community-driven version. You deploy and operate it on your own infrastructure (Docker Compose) and have full control over the code, data, and configuration.
 - **Simple Chat as a Service** — a hosted version operated by the [Center for Humans and Machines](https://www.mpib-berlin.mpg.de/chm) at the Max Planck Institute for Human Development. Researchers use it through a web dashboard without deploying anything themselves.
 
-The hosted service is built on Simple Chat but extends it with features needed to run it as a multi-user platform, such as user accounts with email verification, role-based project access (Superadmin, Level 2 and Level 1 researchers), and per-project model and API-key configuration. **The source code of the service version is not published for safety and security reasons**, since it runs as shared infrastructure handling multiple research groups' data and API keys. This repository remains the openly available, self-hostable version of Simple Chat.
+The hosted service is built on Simple Chat but extends it with features needed to run it as a multi-user platform, such as user accounts with email verification, role-based project access (Superadmin, Level 2 and Level 1 researchers), and per-project model and API-key configuration.
+**The source code of the service version is not published for safety and security reasons**, since it runs as shared infrastructure handling multiple research groups' data and API keys.
+This repository remains the openly available, self-hostable version of Simple Chat.
 
 ### Using the service
 
 1. Read the [Simple Chat as a Service documentation](https://simple-chat.chm.mpib-berlin.mpg.de/).
 1. Register an account on the [dashboard](https://simple-chat-dashboard.chm.mpib-berlin.mpg.de/) and verify your email address via the activation link (valid for 48 hours).
 1. Create a new project in the dashboard, or ask a Superadmin or a Level 2 researcher of an existing project to add you to it.
-1. Enter **your own LLM API key** under _Project Settings → [API & Model Architecture](https://simple-chat.chm.mpib-berlin.mpg.de/docs/researcher-guide/projects/project-settings/api-and-model-architecture)_, and select the model (and, for providers such as Together.AI or Fireworks, the API endpoint). Supported providers include OpenAI, GWDG, Together.AI, and Fireworks. The key is stored hidden and usage is billed by your provider to your account, so use a key approved by your institution.
+1. Enter **your own LLM API key** under _Project Settings → [API & Model Architecture](https://simple-chat.chm.mpib-berlin.mpg.de/docs/researcher-guide/projects/project-settings/api-and-model-architecture)_, and select the model (and, for providers such as Together.AI or Fireworks, the API endpoint).
+   Supported providers include OpenAI, GWDG, Together.AI, and Fireworks. The key is stored hidden and usage is billed by your provider to your account, so use a key approved by your institution.
 1. Configure the system message and chat settings, activate the project, and [embed the chat](https://simple-chat.chm.mpib-berlin.mpg.de/docs/integration-guide/overview) in your survey platform (e.g., [Qualtrics](https://simple-chat.chm.mpib-berlin.mpg.de/docs/integration-guide/qualtrics)).
 
 ### Which one should I use?
@@ -80,8 +83,8 @@ The rest of this README describes the self-hosted version.
     cp backend/env.example backend/.env
     ```
 
-    All variables defined in [`settings.py`](./backend/src/models/settings.py) must be set in the `.env` file.
-    `AZURE_OPENAI_BASE_URL` and `AZURE_OPENAI_API_KEY` can be left empty if not using Azure OpenAI.
+    Variables are described in [`env.example`](./backend/env.example) and [`settings.py`](./backend/src/models/settings.py).
+    Azure OpenAI, Together.ai and object storage (S3) variables can be left empty if not used; S3 is only needed for participant image uploads.
 
   - Create `.env` file in the **frontend** directory by copying the [`env.example`](./frontend/env.example) file:
 
@@ -90,6 +93,45 @@ The rest of this README describes the self-hosted version.
     ```
 
     The default values can be used for local development.
+
+## Quick Start
+
+Run Simple Chat locally and hold a first test conversation. You only need Docker and an OpenAI API key.
+
+1. Clone the repository and create the `.env` files:
+
+   ```bash
+   git clone https://github.com/center-for-humans-and-machines/simple-chat.git
+   cd simple-chat
+   cp backend/env.example backend/.env
+   cp frontend/env.example frontend/.env
+   ```
+
+1. In `backend/.env`, set `OPENAI_API_KEY`, `DASHBOARD_USERNAME_ADMIN` (an email address) and `DASHBOARD_PASSWORD_ADMIN`. All other variables are optional.
+
+1. Start the development stack:
+
+   ```bash
+   docker compose --profile dev up --build
+   ```
+
+   The first build takes a few minutes. The chat frontend runs on <http://localhost:1234>, the dashboard on <http://localhost:3001> and the backend on <http://localhost:8000>.
+
+1. Open the dashboard and log in with `DASHBOARD_USERNAME_ADMIN` as email and `DASHBOARD_PASSWORD_ADMIN` in the project ID field.
+
+1. Click **Create a new project**, enter a project ID (e.g. `my_study`), choose a model, write a system message and click **Create the project**.
+
+1. On the project page, click **Open test chat** to chat with the model, or **Copy iframe code** to embed the chat in your survey, for example:
+
+   ```html
+   <iframe src="http://localhost:1234/?pid=my_study&participant_id=PARTICIPANT_ID" width="100%" height="600" style="border:none;"></iframe>
+   ```
+
+   Replace `PARTICIPANT_ID` with your survey platform's participant variable. See [Integrating Into Online Experiments](./docs/readme.md#integrating-into-online-experiments) for the optional query parameters.
+
+1. Back on the project page, click **Download Conversations as JSON** to export the data.
+
+To make Simple Chat reachable by participants, deploy it to a server as described in the [deployment](./docs/deployment.md) documentation.
 
 ## Installation
 
@@ -100,13 +142,43 @@ The rest of this README describes the self-hosted version.
 
 Refer to the [documentation](./docs/readme.md) folder for usage instructions.
 
+## Participant Limits
+
+Each project can limit how participants use the chat. Set the limits in the dashboard: open a project and click **Usage & limits**. They are stored on the project in MongoDB (`limits` field) and enforced by the backend. By default every limit is off, so new and existing projects behave as before.
+
+| Limit                             | Default                             | Behavior                                                                                                                                                                                                                                                                            |
+| --------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Max conversations per participant | No limit                            | Conversations a `participant_id` has sent a message in. Rounds 2, 3, ... of a multi-round study continue round 1: they do not count and are not blocked once the participant wrote in the previous round. Not applied without a `participant_id`; use the allowlist to require one. |
+| Max turns per conversation        | No limit                            | Participant messages per conversation. Messages copied from earlier rounds do not count. The chat closes after the last allowed turn.                                                                                                                                               |
+| Token cap per conversation        | No limit                            | Prompt and completion tokens per conversation.                                                                                                                                                                                                                                      |
+| Token cap per project             | No limit                            | Prompt and completion tokens across all conversations and `/llm` API calls of the project. Once it is reached, new conversations and API calls are rejected, and running chats end.                                                                                                 |
+| Participant allowlist             | Empty (everyone may join)           | Participant IDs (e.g. Prolific IDs) allowed to start a conversation, one per line.                                                                                                                                                                                                  |
+| Rate limit                        | No limit                            | Conversation starts and messages per window, see below.                                                                                                                                                                                                                             |
+| Rate limit window                 | 60 seconds                          | Length of the rate limit window, at most 86400 seconds (one day).                                                                                                                                                                                                                   |
+| Rate limit counted per            | Participant ID                      | `Participant ID` counts per `participant_id`, falling back to the IP address when the URL has none. `IP address` counts per IP address.                                                                                                                                             |
+| Allowed embedding origins         | Empty (any site may embed the chat) | Origins allowed to show the chat in an iframe, e.g. `https://*.qualtrics.com`, see below.                                                                                                                                                                                           |
+
+When a limit is reached, the participant sees a short message instead of an error, and the chat input closes. The message does not say which limit was reached. A rate-limited message is not sent: it goes back into the input field with a notice to wait.
+Token caps are enforced before each model call: the backend reserves the prompt and the longest reply that still fits under every cap that applies (at most 4096 tokens, or 16384 for reasoning models such as GPT-5, whose hidden reasoning counts against the same limit) and passes that as `max_tokens` (`max_completion_tokens` for reasoning models) to the model, so a reply cannot run past the cap and concurrent calls share the remaining budget instead of all passing at once.
+The prompt is reserved with a conservative estimate: it adds the tokens providers count per message, a margin for models whose tokenizer differs from tiktoken's `cl100k_base`, and the highest token cost an image can have for the model.
+Image messages therefore need a lot of room under a cap, especially with `gpt-4o-mini`, which counts images at a much higher token rate. After the call, the reservation is replaced by the usage the provider reports. Azure API versions before `2024-09-01` do not report usage for streamed replies; there the usage is a tiktoken count without the margin, and images still count at their highest cost.
+When many calls compete for the last of a budget at once, a call that keeps losing gets a "busy, send again" reply instead of a closed chat.
+
+**Rate limits behind a proxy.** By default the backend uses the address of the connection as the participant's IP. Behind a reverse proxy or Kubernetes ingress this is the proxy's address, so set `TRUST_X_FORWARDED_FOR=true` in `backend/.env` to use the `X-Forwarded-For` header instead. Only enable it when a proxy sets this header, because participants can otherwise send their own.
+
+**Restricting embedding.** With allowed embedding origins set, the production frontend sends a `Content-Security-Policy: frame-ancestors` header with these origins, so browsers refuse to show the chat in an iframe on any other site.
+The frontend container gets the policy from the backend at `BACKEND_INTERNAL_URL` (set to `http://backend:8000` in [`compose.yml`](./compose.yml); in Kubernetes, set it to the backend URL). Without `BACKEND_INTERNAL_URL` the header is not sent.
+In addition, the backend refuses to start a conversation when the chat reports being embedded on another origin, which also covers the development frontend. Opening the chat URL directly, outside an iframe, stays possible, for example for the dashboard's test chat.
+
+**CORS.** `CORS_ALLOWED_ORIGINS` in `backend/.env` limits which origins may call the backend. The default `*` allows all. Set it to the chat frontend and dashboard origins, e.g. `CORS_ALLOWED_ORIGINS=https://chat.example.com,https://dashboard.example.com`. The survey's origin is not needed, because the chat inside the iframe calls the backend from the frontend's origin.
+
 ## Citation
 
 If you use Simple Chat in your research, please cite as follows:
 
 - BibTeX:
 
-  ```
+  ```bibtex
   @misc{schettino2025facilitatingintegrationllmsonline,
         title={Facilitating the Integration of LLMs Into Online Experiments With Simple Chat},
         author={R. Bermudez Schettino and A. Dasmeh and L. Brinkmann},
@@ -120,7 +192,7 @@ If you use Simple Chat in your research, please cite as follows:
 
 - APA:
 
-  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_. arXiv. https://doi.org/10.48550/arXiv.2511.19123
+  Bermudez Schettino, R., Dasmeh, A., & Brinkmann, L. (2025). _Facilitating the Integration of LLMs Into Online Experiments With Simple Chat_. arXiv. [https://doi.org/10.48550/arXiv.2511.19123](https://doi.org/10.48550/arXiv.2511.19123)
 
 ## Related
 

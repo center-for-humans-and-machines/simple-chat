@@ -13,6 +13,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageTracker from "../components/PageTracker";
+import { projectStrings as text } from "../strings";
 
 function ProjectPage() {
   const { project_id } = useParams();
@@ -23,6 +24,11 @@ function ProjectPage() {
   const [conversationList, setConversationList] = useState([]);
   const [filteredList, setFilteredList] = useState([]);
   const [loadingText, setLoadingText] = useState("-");
+
+  const frontendURL =
+    process.env.REACT_APP_FRONTEND_URL || "http://localhost:1234";
+  const chatURL = `${frontendURL}/?pid=${projectId}&participant_id=PARTICIPANT_ID`;
+  const iframeCode = `<iframe src="${chatURL}" width="100%" height="600" style="border:none;"></iframe>`;
 
   const searchFor = valueToSearch => {
     const keysToSearch = [
@@ -251,6 +257,60 @@ function ProjectPage() {
           size="small"
         >
           {projectInfo?.openai_backend === "azure" ? "openai" : "azure"}
+        </Button>
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          {text.defaultModel(projectInfo?.model)}
+        </Typography>
+
+        <hr />
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          {text.embedIntro}
+        </Typography>
+        <Box
+          component="pre"
+          sx={{
+            p: 1,
+            mt: 2,
+            background: "#eee",
+            wordWrap: "break-word",
+            overflowWrap: "break-word",
+            whiteSpace: "pre-wrap"
+          }}
+        >
+          {iframeCode}
+        </Box>
+        <Button
+          variant="contained"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          onClick={() => window.navigator.clipboard.writeText(iframeCode)}
+        >
+          {text.copyIframe}
+        </Button>
+        <Button
+          variant="outlined"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          href={chatURL.replace("PARTICIPANT_ID", "test_participant")}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {text.openTestChat}
+        </Button>
+
+        <hr />
+
+        <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+          {text.usageIntro}
+        </Typography>
+        <Button
+          variant="contained"
+          sx={{ mt: 1, mb: 2, mr: 1 }}
+          onClick={() => {
+            navigate(`/project/${projectId}/usage`);
+          }}
+        >
+          {text.usageButton}
         </Button>
 
         <hr />

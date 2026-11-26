@@ -17,15 +17,18 @@ from src.utils.logging import setup_logger
 logger = setup_logger(__name__)
 
 settings = get_settings()
-s3_session = boto3.session.Session()
-s3 = s3_session.client(
-    service_name="s3",
-    aws_access_key_id=settings.s3_access_key,
-    aws_secret_access_key=settings.s3_secret_key,
-    endpoint_url=settings.s3_endpoint,
-    config=Config(signature_version="s3v4"),
-    region_name=settings.s3_region_name,
-)
+# object storage is optional and only used for participant image uploads
+s3 = None
+if settings.s3_bucket_name:
+    s3_session = boto3.session.Session()
+    s3 = s3_session.client(
+        service_name="s3",
+        aws_access_key_id=settings.s3_access_key or None,
+        aws_secret_access_key=settings.s3_secret_key or None,
+        endpoint_url=settings.s3_endpoint or None,
+        config=Config(signature_version="s3v4"),
+        region_name=settings.s3_region_name or None,
+    )
 
 
 async def store_search_parameters(search_params_data, session_id):
@@ -63,6 +66,7 @@ async def get_response(
     client: AsyncOpenAI | AsyncAzureOpenAI,
     model: str,
     participant_id: str = None,
+    project_id: str = None,
     stream: bool = True,
 ) -> MessageDocument:
     omessages = [parse_to_openai(message) for message in messages]
@@ -73,6 +77,7 @@ async def get_response(
         session_id=session_id,
         experiment_id=experiment_id,
         participant_id=participant_id,
+        project_id=project_id,
         sio_server=sio_server,
         sid=sid,
         stream=stream,
@@ -91,6 +96,8 @@ def parse_stream_flag(value) -> bool:
 
 
 async def upload(img, message_id):
+    if s3 is None:
+        raise RuntimeError("Image upload needs object storage: set the S3_* variables.")
     # Decode the base64 string
     img = base64.b64decode(img)
     s3_file_name = f"{message_id}.jpg"
@@ -119,11 +126,13 @@ async def create_system_message_based_on_prev_rounds(
 ):
     looking_for_round = current_round - 1
 
+    # Conversations store both IDs as strings, while a missing ID in the chat
+    # URL arrives here as the integer -1; compare as strings so they match.
     prev_converation = (
         await Conversations.find(
             {
-                "experiment_id": experiment_id,
-                "participant_id": participant_id,
+                "experiment_id": str(experiment_id),
+                "participant_id": str(participant_id),
                 "multi_rounds": looking_for_round,
             }
         )
@@ -138,14 +147,14 @@ async def create_system_message_based_on_prev_rounds(
     return prev_converation[0].messages
 
 
+def project_openai_backend(project: Project) -> str:
+    return project.openai_backend or "azure"  # default mode
+
+
 async def get_openai_backend(project_id):
     projects = await Project.find_many({"project_id": project_id}).to_list()
 
     if len(projects) == 0:
         return "not found"
 
-    project = projects[0]
-
-    # `"openai_backend" in project` is always False on a pydantic model, which
-    # silently forced every project onto Azure; read the field instead.
-    return project.openai_backend or "azure"  # default mode
+    return project_openai_backend(projects[0])

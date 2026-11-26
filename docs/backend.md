@@ -40,7 +40,7 @@ The documentation below includes sample requests to the backend with [`curl`](ht
 
 Every conversation should be assigned to a project. Project must be registered in advance.
 
-To register a new project this endpoint by the proper body should be called as:
+The easiest way is the **Create a new project** button in the [dashboard](./dashboard.md) (admin login). Alternatively, call this endpoint:
 
 ```shell
 curl --request POST \
@@ -50,10 +50,13 @@ curl --request POST \
   "project_id": "MY_PROJECT_ID",
   "requested_by": "MYEMAIL",
   "system_message": "You are a helpful assistant.",
+  "model": "gpt-4o"
 }'
 ```
 
 In the example above, `YOUR_SIMPLE_CHAT_BACKEND_URL` is a placeholder for your actual Simple Chat backend URL.
+
+`model` is optional and sets the project's default model, used when the chat URL has no `model` query parameter. `GET /project/models` lists the supported values.
 
 The `requested_by` should be the email address of who submit the request.
 
