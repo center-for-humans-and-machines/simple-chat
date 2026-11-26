@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `POST /llm/json_call` returns the model's JSON reply and stores the call;
+  before, every request to a valid project failed with a 500 error (SIM-81)
 - The chat backend accepts `participant_id` and `experiment_id` sent as
   numbers again and treats them as strings, also when it looks up a
   blacklisted participant or the previous round; since the Pydantic 2 upgrade

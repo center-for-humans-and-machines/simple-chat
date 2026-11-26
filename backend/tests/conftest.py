@@ -3,6 +3,8 @@ import pytest
 import pytest_asyncio
 from beanie import init_beanie
 from mongomock_motor import AsyncMongoMockClient, AsyncMongoMockDatabase
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice
 from src.main import app
 from src.models import __beanie_models__
 
@@ -60,4 +62,21 @@ async def register_project(client: httpx.AsyncClient, project_id: str) -> httpx.
     return await client.post(
         "/project/register",
         json={"project_id": project_id, "requested_by": RESEARCHER, "system_message": "hi"},
+    )
+
+
+def make_completion(content: str) -> ChatCompletion:
+    """Return an OpenAI chat completion with one assistant message."""
+    return ChatCompletion(
+        id="completion",
+        created=0,
+        model="gpt-4o",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=ChatCompletionMessage(role="assistant", content=content),
+            )
+        ],
     )

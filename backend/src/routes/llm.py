@@ -1,6 +1,6 @@
 # routes.py
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -21,9 +21,31 @@ class LlmCallInput(BaseModel):
     chat: List[Dict[str, Any]]
 
 
-async def call_llm_model(model: str, messages: list, project_id: str):
+async def call_llm_model(
+    model: str,
+    messages: list,
+    project_id: str,
+    response_format: Optional[Dict[str, Any]] = None,
+):
+    """Send a chat to the model of a project and return the completion.
+
+    Args:
+        model: The name of the model to call.
+        messages: The chat messages in OpenAI format.
+        project_id: The project whose OpenAI backend handles the call.
+        response_format: The OpenAI `response_format` to request, for example
+            `{"type": "json_object"}`. When omitted, the request does not
+            include the parameter and the model answers in plain text.
+
+    Returns:
+        The chat completion returned by the model.
+    """
     openai_backend = await get_openai_backend(project_id)
     client = init_model_endpoint(model, openai_backend)
+
+    completion_options = {}
+    if response_format is not None:
+        completion_options["response_format"] = response_format
 
     response = await completion_with_backoff(
         client,
@@ -31,6 +53,7 @@ async def call_llm_model(model: str, messages: list, project_id: str):
         messages=messages,
         temperature=0.7,
         stream=False,
+        **completion_options,
     )
 
     return response
