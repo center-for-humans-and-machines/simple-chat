@@ -140,7 +140,7 @@ async def test_second_round_with_numeric_ids_continues_the_first(
 async def test_conversation_stored_with_numeric_ids_still_loads(
     client: httpx.AsyncClient,
 ) -> None:
-    await Conversations.get_motor_collection().insert_one(
+    await Conversations.get_pymongo_collection().insert_one(
         {
             "conversation_id": "stored-with-numbers",
             "created_at": "2024-01-01 00:00:00",
