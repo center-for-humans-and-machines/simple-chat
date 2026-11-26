@@ -18,10 +18,9 @@ packages = [{ include = "src" }]
 python = ">=3.10,<3.14"
 fastapi = "^0.162.5"
 uvicorn = { extras = ["standard"], version = "^0.54.0" }
-beanie = "^1.19.0"
+beanie = "^2.2.0"
 openai = "2.54.0"
 python-dotenv = "^1.2.4"
-mongomock-motor = "^0.0.36"
 pytest-asyncio = "^0.21.0"
 pandas = "^2.2.2"
 tiktoken = "^0.14.0"
@@ -39,6 +38,7 @@ black = "^26.10.1"
 mypy = "^2.4.1"
 flake8 = "^6.0.0"
 httpx = "^0.28.1"
+mongomock-motor = "^0.0.36"
 pytest-asyncio = "^0.21.0"
 
 [build-system]
