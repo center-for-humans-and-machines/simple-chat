@@ -138,7 +138,7 @@ async def download_chat_in_json(
         )
 
     return {
-        "document_id": conversation.id,
+        "document_id": str(conversation.id),
         "conversation_id": conversation.conversation_id,
         "chat": messages_to_send,
     }
