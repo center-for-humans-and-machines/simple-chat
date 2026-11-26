@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The backend runs on Pydantic 2 and FastAPI 0.162, up from Pydantic 1.10
+  and FastAPI 0.95; settings now come from `pydantic-settings` (SIM-79)
+
 ### Deprecated
 
 ### Fixed

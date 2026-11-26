@@ -42,7 +42,7 @@ async def send_message(data: LlmCallInput):
     if len(project) == 0:
         raise HTTPException(status_code=400, detail="project not found")
     else:
-        if "active" in project[0].dict():
+        if "active" in project[0].model_dump():
             if project[0].active == False:
                 raise HTTPException(status_code=401, detail="project is deactivated")
 
@@ -59,7 +59,7 @@ async def send_message(data: LlmCallInput):
     new_llm_call = LlmCall(
         project_id=data.project_id,
         chat=data.chat,
-        response=response,
+        response=response.model_dump(),
         created_at=str(datetime.now()),
     )
 
@@ -74,7 +74,7 @@ async def send_json_message(data: LlmCallInput):
     if len(project) == 0:
         raise HTTPException(status_code=400, detail="project not found")
     else:
-        if "active" in project[0].dict():
+        if "active" in project[0].model_dump():
             if project[0].active == False:
                 raise HTTPException(status_code=401, detail="project is deactivated")
 
@@ -94,7 +94,7 @@ async def send_json_message(data: LlmCallInput):
     new_llm_call = LlmCall(
         project_id=data.project_id,
         chat=data.chat,
-        response=response,
+        response=response.model_dump(),
         created_at=str(datetime.now()),
     )
 
@@ -133,7 +133,7 @@ async def function_call(data: LlmFunctionCallInput):
     if len(project) == 0:
         raise HTTPException(status_code=400, detail="project not found")
     else:
-        if "active" in project[0].dict():
+        if "active" in project[0].model_dump():
             if project[0].active == False:
                 raise HTTPException(status_code=401, detail="project is deactivated")
 
@@ -150,7 +150,7 @@ async def function_call(data: LlmFunctionCallInput):
     new_llm_call = LlmCall(
         project_id=data.project_id,
         chat=data.chat,
-        response=response,
+        response=response.model_dump(),
         created_at=str(datetime.now()),
     )
 

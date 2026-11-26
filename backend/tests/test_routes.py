@@ -6,9 +6,14 @@ from src.main import app
 from src.models.models import Project
 
 
+def make_client() -> httpx.AsyncClient:
+    """Return an HTTP client that calls the app in process."""
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+
 @pytest.mark.asyncio
 async def test_health_endpoint():
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+    async with make_client() as client:
         response = await client.get("/health")
 
     assert response.status_code == 200
@@ -21,7 +26,7 @@ async def test_chat_rejects_unknown_project(monkeypatch):
     query.to_list = AsyncMock(return_value=[])
     monkeypatch.setattr(Project, "find_many", Mock(return_value=query))
 
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+    async with make_client() as client:
         response = await client.post(
             "/llm/call",
             json={

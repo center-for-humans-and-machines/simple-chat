@@ -52,7 +52,7 @@ async def send_message(data: ProjectRegisterInput):
 
     await new_project.insert()
 
-    return {"status": True, "doc_id": new_project.id, "project": new_project}
+    return {"status": True, "doc_id": str(new_project.id), "project": new_project}
 
 
 @project_router.post("/custom_system_message")
@@ -80,4 +80,4 @@ async def custom_system_message(data: CustomSystemMessageInput):
 
     await new_custom_system_message.insert()
 
-    return {"status": True, "system_message_id": new_custom_system_message.id}
+    return {"status": True, "system_message_id": str(new_custom_system_message.id)}
