@@ -40,7 +40,7 @@ Below are diagrams illustrating the architecture and chat interface:
 
 Simple Chat comes in two flavors:
 
-- **Self-hosted Simple Chat (this repository)** — the open-source, community-driven version. You deploy and operate it on your own infrastructure (Docker Compose or Kubernetes) and have full control over the code, data, and configuration.
+- **Self-hosted Simple Chat (this repository)** — the open-source, community-driven version. You deploy and operate it on your own infrastructure (Docker Compose) and have full control over the code, data, and configuration.
 - **Simple Chat as a Service** — a hosted version operated by the [Center for Humans and Machines](https://www.mpib-berlin.mpg.de/chm) at the Max Planck Institute for Human Development. Researchers use it through a web dashboard without deploying anything themselves.
 
 The hosted service is built on Simple Chat but extends it with features needed to run it as a multi-user platform, such as user accounts with email verification, role-based project access (Superadmin, Level 2 and Level 1 researchers), and per-project model and API-key configuration. **The source code of the service version is not published for safety and security reasons**, since it runs as shared infrastructure handling multiple research groups' data and API keys. This repository remains the openly available, self-hostable version of Simple Chat.
@@ -57,7 +57,7 @@ The hosted service is built on Simple Chat but extends it with features needed t
 
 | | Self-host (this repository) | Use the service |
 | --- | --- | --- |
-| **Setup** | Deploy with Docker / Kubernetes, configure database, object storage, and secrets | Register on the dashboard, no deployment needed |
+| **Setup** | Deploy with Docker, configure database, object storage, and secrets | Register on the dashboard, no deployment needed |
 | **Technical skills required** | Server administration, Docker, basic DevOps | None beyond using a web dashboard |
 | **LLM API key** | Configured in the backend `.env` file | Entered per project in the dashboard |
 | **Data storage** | On your own infrastructure, under your control | On infrastructure operated by MPIB |
