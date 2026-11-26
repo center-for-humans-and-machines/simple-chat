@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The chat backend accepts `participant_id` and `experiment_id` sent as
+  numbers again and treats them as strings, also when it looks up a
+  blacklisted participant or the previous round; since the Pydantic 2 upgrade
+  a number failed validation and no conversation was created (SIM-82)
+
 ### Security
 
 ### Removed
