@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The backend uses Beanie 2 and PyMongo's async client, up from Beanie 1.30
+  with Motor (SIM-XX)
 - The backend runs on Pydantic 2 and FastAPI 0.162, up from Pydantic 1.10
   and FastAPI 0.95; settings now come from `pydantic-settings` (SIM-79)
 
